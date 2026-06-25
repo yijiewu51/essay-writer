@@ -666,6 +666,20 @@
       </div>
 
       <!-- Common for all -->
+      <div class="section-label">去AI个性化（降低 GPTZero 检测）</div>
+
+      <div class="form-group">
+        <label>你的口语样本</label>
+        <textarea id="voice-sample" rows="3" placeholder="粘贴几句你自己随手写的话，中英文都行，不用在意语法。AI会模仿你的句子节奏和语气，来改掉那些「总结性AI句子」。&#10;&#10;e.g. 我当时其实没想那么多，就是觉得这个方向比较适合我 / I don't actually know when I got into this, it just kind of happened"></textarea>
+        <div class="hint">这是降低 GPTZero 最有效的方法：AI 读你自己的语气，用你的方式改写</div>
+      </div>
+
+      <div class="form-group">
+        <label>私人细节（替换AI通用表达）</label>
+        <textarea id="personal-details" rows="3" placeholder="提供只有你知道的具体细节，AI会用这些替换掉文书里那些空洞的总结句。&#10;&#10;e.g.&#10;- 老师叫 Dr. Chen，有次上课说「数据永远比直觉可靠」&#10;- 那篇新闻是在2019年冬天看的，当时在学校图书馆&#10;- 参加 Brain Bee 备考时用的是厨房桌子，每晚11点开始"></textarea>
+        <div class="hint">越具体越好，AI 无法自己编造这些，必须你提供</div>
+      </div>
+
       <div class="section-label">其他设置</div>
 
       <div class="form-group">
@@ -785,7 +799,7 @@ function getKey() {
 
 // ===== Form Persistence =====
 const FORM_FIELDS = [
-  'docType','school','wordCount','extra','useTurnitin',
+  'docType','school','wordCount','extra','useTurnitin','voice-sample','personal-details',
   'sop-edu','sop-research','sop-work','sop-awards','sop-story','sop-why','sop-goals',
   'ps-bg','ps-story','ps-why','ps-extra',
   'ca-prompt','ca-story','ca-msg',
@@ -1361,6 +1375,29 @@ function promptHumanize(text, wc) {
     ? `\nUSER-DEFINED AI PATTERNS (also fix these):\n${wl.aitells}`
     : '';
 
+  const voiceSample = document.getElementById('voice-sample').value.trim();
+  const personalDetails = document.getElementById('personal-details').value.trim();
+
+  const voiceSection = voiceSample ? `
+VOICE CALIBRATION (critical for GPTZero bypass):
+The writer's natural voice is shown below. Analyze their sentence rhythm, word choices, how they begin and end thoughts, their level of formality. When rewriting AI-tell sentences (especially summary sentences, transition sentences, and paragraph closings), mirror this voice closely — not the content, just the style and rhythm.
+
+Writer's natural voice sample:
+"""
+${voiceSample}
+"""
+` : '';
+
+  const detailsSection = personalDetails ? `
+PERSONAL DETAILS TO INJECT:
+The writer has provided specific personal details below. Where the text currently uses generic AI-style conclusion or transition sentences ("That X is why I want Y", "This taught me to Z", "That combination is why"), replace them with something specific using these details. Do not force them in awkwardly — only use where they naturally fit.
+
+Personal details:
+"""
+${personalDetails}
+"""
+` : '';
+
   return `You are a professional writing editor. Your job is to remove every trace of AI-generated writing from this text.
 
 PATTERNS TO FIND AND FIX:
@@ -1382,10 +1419,13 @@ Voice:
 - Generic transitions ("Through this experience", "Building on this", "This journey"): cut or rephrase naturally
 - Future-trite endings ("I look forward to contributing"): replace with something specific
 ${extraTells}
+${voiceSection}${detailsSection}
 PROCESS:
-1. First pass: fix all patterns above
-2. SECOND PASS: ask yourself "what 3 phrases or sentences still sound AI-generated?" Fix those too.
-3. Do not change any facts, stories, or arguments. Keep the same length (~${wc} words).
+1. First pass: fix all structural/vocabulary patterns above
+2. If voice sample provided: rewrite every summary sentence, transition sentence, and paragraph closing to match the writer's voice
+3. If personal details provided: replace generic AI conclusion sentences with specific details from the list
+4. FINAL CHECK: ask yourself "what 3 sentences would GPTZero flag as AI?" Rewrite those specifically.
+5. Do not change any facts, numbers, or stories. Keep the same length (~${wc} words).
 
 Output ONLY the revised text. No commentary, no explanation, no headers.
 
