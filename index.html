@@ -1443,14 +1443,34 @@ async function generate() {
 
       switchTab(2);
       outputs[2] = await callClaude(
-        'You are an expert college admissions writer. Translate the French text to natural, authentic English and do a final polish pass.',
-        `Translate this French text back to English. This is a personal application essay/letter — the voice should be genuine, personal, and specific.
+        'You are a writing editor whose only job is to make text pass AI detectors by introducing genuine human writing patterns — not by cleaning it up, but by breaking predictable patterns.',
+        `Translate this French text back to English, then aggressively edit for human rhythm. This is a personal application essay.
 
-After translating, do a final polish:
-- Vary sentence lengths (mix short and long)
-- Remove any stiff or overly formal phrasing
-- Ensure natural human rhythm
-- Keep all facts, names, and stories intact
+TRANSLATION: Preserve all facts, names, numbers, and stories exactly.
+
+AFTER TRANSLATING — mandatory edits for GPTZero/AI detection bypass:
+
+BURSTINESS (most important):
+- After every 2-3 long sentences (15+ words), insert a short one (3-8 words). Hard stop. Fragment even.
+- After a fragment or very short sentence, you may return to a longer one.
+- Target: at least 4-5 sentences under 10 words across the whole text.
+- No three consecutive sentences of similar length — ever.
+
+PERPLEXITY (word predictability):
+- Replace "safe" word choices with slightly unexpected but natural ones.
+- Where the text says something generic, make it oddly specific or slightly informal.
+- One sentence per paragraph should feel slightly off-script — a thought that interrupts, an aside, a self-correction.
+
+STRUCTURAL AI PATTERNS — remove all of these:
+- "something clicked" → cut or replace
+- "What draws me to X is Y" constructions → rephrase as direct statement
+- "That X is what has Y" constructions → cut the meta-framing, just say the thing
+- Final list + summary ("A, B, C — each did X. That friction is what...") → break up or cut the summary sentence
+- Em-dashes (—) → replace with period, comma, or nothing
+- Tidy analytical closing sentences → replace with something abrupt, specific, or unresolved
+
+CONSTRAINTS:
+- Keep all facts, numbers, and stories
 - Target approximately ${ctx.wc} words
 - Output ONLY the final text, no commentary
 
