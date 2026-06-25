@@ -277,6 +277,26 @@
 
     /* Word count hint */
     .hint { font-size: 0.72rem; color: #94a3b8; margin-top: 3px; }
+
+    /* Wordlist panel */
+    .wordlist-panel {
+      display: none;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 16px 24px 20px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .wordlist-panel.open { display: block; }
+    .wordlist-inner { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .wordlist-inner { grid-template-columns: 1fr; } }
+    .wl-col label { color: #94a3b8; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 6px; display: block; }
+    .wl-col textarea { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; font-size: 0.82rem; }
+    .wl-col textarea::placeholder { color: #475569; }
+    .wl-col textarea:focus { border-color: #3b82f6; }
+    .wl-hint { font-size: 0.7rem; color: #475569; margin-top: 4px; }
+    .wl-actions { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
+    .wl-saved { font-size: 0.76rem; color: #34d399; opacity: 0; transition: opacity 0.3s; }
+    .wl-saved.show { opacity: 1; }
   </style>
 </head>
 <body>
@@ -286,7 +306,10 @@
     <div class="app-title">留学文书生成器</div>
     <div class="app-sub">解决 Turnitin 检测 + 人眼识别 | SOP · PS · Common App · 推荐信</div>
   </div>
-  <button class="btn-icon" onclick="toggleSettings()">API Key 设置</button>
+  <div style="display:flex;gap:8px;">
+    <button class="btn-icon" onclick="toggleWordlist()">词库配置</button>
+    <button class="btn-icon" onclick="toggleSettings()">API Key</button>
+  </div>
 </header>
 
 <div class="settings-panel" id="settingsPanel">
@@ -298,6 +321,32 @@
       <button class="btn-sm danger" onclick="clearKey()">清除</button>
     </div>
     <div id="apiStatus"></div>
+  </div>
+</div>
+
+<!-- Wordlist Panel -->
+<div class="wordlist-panel" id="wordlistPanel">
+  <div class="wordlist-inner">
+    <div class="wl-col">
+      <label>禁用词（绝对不能出现）</label>
+      <textarea id="wl-banned" rows="6" placeholder="每行一个，或用逗号分隔&#10;&#10;e.g.&#10;meticulously&#10;commendable&#10;intricate"></textarea>
+      <div class="wl-hint">这些词会追加到内置禁词表，生成和优化时均生效</div>
+    </div>
+    <div class="wl-col">
+      <label>推荐词（希望多出现）</label>
+      <textarea id="wl-preferred" rows="6" placeholder="每行一个，或用逗号分隔&#10;&#10;e.g.&#10;specifically&#10;for instance&#10;in practice"></textarea>
+      <div class="wl-hint">AI 会在合适的地方优先使用这些词汇或表达</div>
+    </div>
+    <div class="wl-col">
+      <label>额外 AI 特征（你认为像AI的）</label>
+      <textarea id="wl-aitells" rows="6" placeholder="每行描述一种你注意到的AI写作习惯&#10;&#10;e.g.&#10;用「not only...but also」结构&#10;句子总以「I」开头&#10;结尾总说「I am excited to」"></textarea>
+      <div class="wl-hint">这些特征会加入去AI优化阶段的检查列表</div>
+    </div>
+  </div>
+  <div class="wl-actions">
+    <button class="btn-sm" onclick="saveWordlist()">保存词库</button>
+    <button class="btn-sm danger" onclick="clearWordlist()">清空</button>
+    <span class="wl-saved" id="wlSaved">已保存</span>
   </div>
 </div>
 
@@ -536,6 +585,7 @@ let activeStage = -1;
 // ===== API Key =====
 function toggleSettings() {
   document.getElementById('settingsPanel').classList.toggle('open');
+  document.getElementById('wordlistPanel').classList.remove('open');
 }
 
 function saveKey() {
@@ -569,7 +619,53 @@ function getKey() {
     document.getElementById('apiKeyInput').value = k;
     setStatus('已加载保存的 Key', '#10b981');
   }
+  loadWordlist();
 })();
+
+// ===== Wordlist =====
+function toggleWordlist() {
+  document.getElementById('wordlistPanel').classList.toggle('open');
+  // close settings if open
+  document.getElementById('settingsPanel').classList.remove('open');
+}
+
+function saveWordlist() {
+  const data = {
+    banned: document.getElementById('wl-banned').value,
+    preferred: document.getElementById('wl-preferred').value,
+    aitells: document.getElementById('wl-aitells').value,
+  };
+  localStorage.setItem('wl_config', JSON.stringify(data));
+  const el = document.getElementById('wlSaved');
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function clearWordlist() {
+  ['wl-banned','wl-preferred','wl-aitells'].forEach(id => document.getElementById(id).value = '');
+  localStorage.removeItem('wl_config');
+}
+
+function loadWordlist() {
+  try {
+    const raw = localStorage.getItem('wl_config');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.banned) document.getElementById('wl-banned').value = data.banned;
+    if (data.preferred) document.getElementById('wl-preferred').value = data.preferred;
+    if (data.aitells) document.getElementById('wl-aitells').value = data.aitells;
+  } catch {}
+}
+
+function getWordlist() {
+  const parse = id => document.getElementById(id).value
+    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  return {
+    banned: parse('wl-banned'),
+    preferred: parse('wl-preferred'),
+    aitells: document.getElementById('wl-aitells').value.trim(),
+  };
+}
 
 // ===== Doc Type Toggle =====
 function switchType() {
@@ -772,6 +868,14 @@ function buildContext() {
 }
 
 function promptGenerate({ typeLabel, info, wc }) {
+  const wl = getWordlist();
+  const extraBanned = wl.banned.length
+    ? `\nADDITIONAL BANNED WORDS (also forbidden): ${wl.banned.join(', ')}`
+    : '';
+  const preferredSection = wl.preferred.length
+    ? `\nPREFERRED VOCABULARY: When natural and appropriate, prefer these words/phrases: ${wl.preferred.join(', ')}`
+    : '';
+
   return `Write a ${typeLabel} for a university application.
 
 APPLICANT INFORMATION:
@@ -785,7 +889,7 @@ RHYTHM:
 - End with something specific and forward-looking, not a generic "I look forward to contributing."
 
 BANNED WORDS (do not use any of these under any circumstances):
-delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, holistic, paradigm, synergy, navigate, landscape, realm, testament, it goes without saying, it's worth noting, it's important to note, in today's world, throughout my journey, passion for, needless to say, as an AI, showcased, honed, diverse perspectives, fostered, spearheaded, garnered
+delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, holistic, paradigm, synergy, navigate, landscape, realm, testament, it goes without saying, it's worth noting, it's important to note, in today's world, throughout my journey, passion for, needless to say, as an AI, showcased, honed, diverse perspectives, fostered, spearheaded, garnered${extraBanned}
 
 STRUCTURE:
 - No em-dashes (—). Use periods, commas, colons, or parentheses instead.
@@ -799,18 +903,26 @@ SPECIFICITY:
 - Show through actions and concrete scenes — do not tell through adjectives.
 - Every claim must be backed by a specific example, number, or scene.
 - If this is a recommendation letter, write entirely from the recommender's first-person perspective.
-
+${preferredSection}
 Target length: approximately ${wc} words.
 Output ONLY the essay/letter text. No title, no heading, no commentary.`;
 }
 
 function promptHumanize(text, wc) {
+  const wl = getWordlist();
+  const extraBanned = wl.banned.length
+    ? `\nADDITIONAL BANNED WORDS (user-specified, remove these too): ${wl.banned.join(', ')}`
+    : '';
+  const extraTells = wl.aitells
+    ? `\nUSER-DEFINED AI PATTERNS (also fix these):\n${wl.aitells}`
+    : '';
+
   return `You are a professional writing editor. Your job is to remove every trace of AI-generated writing from this text.
 
 PATTERNS TO FIND AND FIX:
 
 Vocabulary:
-- Remove any banned words still present: delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, navigate, landscape, realm, testament, showcased, honed, spearheaded, garnered, diverse perspectives
+- Remove any banned words still present: delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, navigate, landscape, realm, testament, showcased, honed, spearheaded, garnered, diverse perspectives${extraBanned}
 
 Structure:
 - Em-dashes (—): replace each with a period, comma, colon, or parentheses
@@ -825,7 +937,7 @@ Voice:
 - Filler hedges (somewhat, rather, quite, very, truly, really): cut most of them
 - Generic transitions ("Through this experience", "Building on this", "This journey"): cut or rephrase naturally
 - Future-trite endings ("I look forward to contributing"): replace with something specific
-
+${extraTells}
 PROCESS:
 1. First pass: fix all patterns above
 2. SECOND PASS: ask yourself "what 3 phrases or sentences still sound AI-generated?" Fix those too.
