@@ -792,6 +792,10 @@ function getKey() {
   return localStorage.getItem('ant_key') || document.getElementById('apiKeyInput').value.trim();
 }
 
+// ===== History constants (must be before init) =====
+const HISTORY_KEY = 'essay_history';
+const MAX_HISTORY = 30;
+
 // ===== Form Persistence =====
 const FORM_FIELDS = [
   'docType','school','wordCount','extra','useTurnitin','voice-sample',
@@ -851,9 +855,6 @@ function loadFormData() {
 })();
 
 // ===== History =====
-const HISTORY_KEY = 'essay_history';
-const MAX_HISTORY = 30;
-
 function toggleHistory() {
   const overlay = document.getElementById('historyOverlay');
   overlay.classList.toggle('open');
