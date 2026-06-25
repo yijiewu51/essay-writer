@@ -455,6 +455,7 @@
           <option value="sop">Statement of Purpose（SOP — 研究生申请）</option>
           <option value="ps">Personal Statement（PS — 本科 / 综合）</option>
           <option value="ca">Common App Essay（本科 — 650词）</option>
+          <option value="ucas">UCAS Personal Statement（英国本科申请）</option>
           <option value="rl">推荐信（Recommendation Letter）</option>
         </select>
       </div>
@@ -467,7 +468,7 @@
       <div class="form-group">
         <label>目标字数</label>
         <input type="number" id="wordCount" value="650" min="150" max="2000" />
-        <div class="hint">SOP 通常 500-1000 词，Common App 固定 650 词，推荐信 400-600 词</div>
+        <div class="hint" id="wcHint">SOP 通常 500-1000 词，Common App 固定 650 词，推荐信 400-600 词</div>
       </div>
 
       <!-- SOP fields -->
@@ -547,6 +548,37 @@
         <div class="form-group">
           <label>这个故事想传达什么</label>
           <textarea id="ca-msg" rows="2" placeholder="招生官读完这篇文章后，你最想让他们记住的一点是什么？"></textarea>
+        </div>
+      </div>
+
+      <!-- UCAS fields -->
+      <div id="grp-ucas" class="field-group">
+        <div class="section-label">申请学科 & 动机</div>
+        <div class="form-group">
+          <label>申请学科</label>
+          <input type="text" id="ucas-subject" placeholder="e.g. Computer Science / Economics / Medicine" />
+        </div>
+        <div class="form-group">
+          <label>为什么选这个学科（学术动机）</label>
+          <textarea id="ucas-why" rows="3" placeholder="最初让你对这个学科产生兴趣的具体事件、书、课程或问题——UCAS最看重学术动机"></textarea>
+        </div>
+        <div class="section-label">学术准备</div>
+        <div class="form-group">
+          <label>相关课程 & 学习内容</label>
+          <textarea id="ucas-academic" rows="3" placeholder="A-level / IB / AP 相关科目、具体课题、学到的核心概念——要体现与申请学科的直接联系"></textarea>
+        </div>
+        <div class="form-group">
+          <label>课外延伸阅读 & 自主探索</label>
+          <textarea id="ucas-reading" rows="3" placeholder="你主动读过的书、论文、纪录片、在线课程——具体书名/作者/内容，这是英国大学最看重的部分之一"></textarea>
+        </div>
+        <div class="section-label">实践 & 课外活动</div>
+        <div class="form-group">
+          <label>相关工作 / 实习 / 志愿者经历</label>
+          <textarea id="ucas-work" rows="3" placeholder="与学科相关的工作影子、实习、项目——说明你学到了什么，怎么加深了对学科的理解"></textarea>
+        </div>
+        <div class="form-group">
+          <label>课外活动（可选）</label>
+          <textarea id="ucas-extra" rows="2" placeholder="社团、比赛、领导力经历——只写能体现学术潜力或可迁移技能的，篇幅不超过15%"></textarea>
         </div>
       </div>
 
@@ -729,7 +761,7 @@ function handleOverlayClick(e) {
 
 function saveToHistory(type, school, outs) {
   const all = getHistory();
-  const typeLabel = { sop:'SOP', ps:'Personal Statement', ca:'Common App', rl:'推荐信' }[type] || type;
+  const typeLabel = { sop:'SOP', ps:'Personal Statement', ca:'Common App', ucas:'UCAS PS', rl:'推荐信' }[type] || type;
   const item = {
     id: Date.now(),
     date: new Date().toLocaleString('zh', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }),
@@ -851,12 +883,16 @@ function getWordlist() {
 // ===== Doc Type Toggle =====
 function switchType() {
   const t = document.getElementById('docType').value;
-  ['sop','ps','ca','rl'].forEach(g => {
+  ['sop','ps','ca','ucas','rl'].forEach(g => {
     document.getElementById('grp-' + g).classList.toggle('show', g === t);
   });
-  // Set default word counts
-  const wc = { sop: 700, ps: 650, ca: 650, rl: 500 };
-  document.getElementById('wordCount').value = wc[t];
+  const wc = { sop: 700, ps: 650, ca: 650, ucas: 550, rl: 500 };
+  document.getElementById('wordCount').value = wc[t] || 650;
+  const hints = {
+    ucas: 'UCAS 上限 4000 字符（约 550 词）— 学科为核心，不需指定学校名称',
+    default: 'SOP 通常 500-1000 词，Common App 固定 650 词，推荐信 400-600 词',
+  };
+  document.getElementById('wcHint').textContent = hints[t] || hints.default;
 }
 
 // ===== Tabs =====
@@ -1004,7 +1040,7 @@ function buildContext() {
   const wc = document.getElementById('wordCount').value;
   const extra = document.getElementById('extra').value.trim();
 
-  const typeLabel = { sop: 'Statement of Purpose', ps: 'Personal Statement', ca: 'Common App Essay', rl: 'Recommendation Letter' }[type];
+  const typeLabel = { sop: 'Statement of Purpose', ps: 'Personal Statement', ca: 'Common App Essay', ucas: 'UCAS Personal Statement', rl: 'Recommendation Letter' }[type];
 
   let info = `Document type: ${typeLabel}\nTarget school/program: ${school}\nTarget word count: ${wc} words\n\n`;
 
@@ -1035,6 +1071,13 @@ function buildContext() {
     info += `Common App Prompt ${pn}: ${prompts[pn]}\n`;
     info += `Core story: ${document.getElementById('ca-story').value}\n`;
     info += `Core message to convey: ${document.getElementById('ca-msg').value}\n`;
+  } else if (type === 'ucas') {
+    info += `Subject applying for: ${document.getElementById('ucas-subject').value}\n`;
+    info += `Why this subject (academic motivation): ${document.getElementById('ucas-why').value}\n`;
+    info += `Relevant academic coursework: ${document.getElementById('ucas-academic').value}\n`;
+    info += `Independent reading / self-study beyond curriculum: ${document.getElementById('ucas-reading').value}\n`;
+    info += `Relevant work experience / volunteering: ${document.getElementById('ucas-work').value}\n`;
+    info += `Extracurricular activities: ${document.getElementById('ucas-extra').value}\n`;
   } else if (type === 'rl') {
     info += `Recommender: ${document.getElementById('rl-writer').value}\n`;
     info += `Relationship to applicant: ${document.getElementById('rl-relation').value}\n`;
@@ -1045,10 +1088,56 @@ function buildContext() {
   }
 
   if (extra) info += `\nAdditional notes: ${extra}\n`;
-  return { typeLabel, info, wc };
+  return { typeLabel, info, wc, type };
 }
 
-function promptGenerate({ typeLabel, info, wc }) {
+function promptGenerateUCAS({ info, wc }) {
+  const wl = getWordlist();
+  const extraBanned = wl.banned.length
+    ? `\nADDITIONAL BANNED WORDS: ${wl.banned.join(', ')}`
+    : '';
+  const preferredSection = wl.preferred.length
+    ? `\nPREFERRED VOCABULARY: When natural and appropriate, prefer: ${wl.preferred.join(', ')}`
+    : '';
+
+  return `Write a UCAS Personal Statement for a UK university application.
+
+APPLICANT INFORMATION:
+${info}
+
+UCAS-SPECIFIC RULES (mandatory — UK admissions is very different from US):
+
+PURPOSE:
+- This is a subject-focused statement, NOT a life story. The central question is: "Why are you academically suited for this subject?"
+- Do NOT name specific universities. One statement goes to all UK choices.
+- Roughly 85% academics, 15% extracurriculars.
+
+STRUCTURE (follow this order):
+1. Opening: a specific intellectual moment, question, or observation that drew you to this subject — not "I have always been fascinated by..."
+2. Academic preparation: what you have studied and what specific ideas/concepts you engaged with deeply
+3. Independent intellectual engagement: books you read beyond the syllabus (cite real titles and authors), papers, lectures, ideas that challenged or extended your thinking — this is the most important section for UK admissions
+4. Relevant experience: work shadow, internship, research, projects — what you learned academically from them
+5. Brief extracurriculars: only if they demonstrate transferable intellectual skills
+6. Forward-looking close: what specific aspect of this subject you want to explore at university level
+
+BANNED WORDS (never use):${extraBanned}
+delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, holistic, paradigm, synergy, navigate, landscape, realm, showcased, honed, spearheaded, garnered, ignited my passion, from a young age, I have always been fascinated
+
+WRITING STYLE:
+- Confident, precise, academic but not stiff
+- Vary sentence lengths — mix short punchy statements with longer analytical ones
+- No em-dashes (—). Use commas, colons, or parentheses.
+- No "rule of three" lists
+- No signposting: firstly, secondly, in conclusion, to summarize
+- Every claim backed by a specific example, named text, or concrete experience
+- UK English spelling (analyse, recognise, behaviour)
+${preferredSection}
+Target length: approximately ${wc} words (stay under 4000 characters).
+Output ONLY the personal statement text. No title, no heading, no commentary.`;
+}
+
+function promptGenerate({ typeLabel, info, wc, type }) {
+  if (type === 'ucas') return promptGenerateUCAS({ info, wc });
   const wl = getWordlist();
   const extraBanned = wl.banned.length
     ? `\nADDITIONAL BANNED WORDS (also forbidden): ${wl.banned.join(', ')}`
@@ -1145,7 +1234,7 @@ async function generate() {
   const school = document.getElementById('school').value.trim();
 
   // Basic validation
-  const stories = { sop: 'sop-story', ps: 'ps-story', ca: 'ca-story', rl: 'rl-examples' };
+  const stories = { sop: 'sop-story', ps: 'ps-story', ca: 'ca-story', ucas: 'ucas-why', rl: 'rl-examples' };
   const storyVal = document.getElementById(stories[type])?.value?.trim();
   if (!school) { alert('请填写目标学校 & 专业'); return; }
   if (!storyVal) { alert('请填写核心故事 / 具体事例，这是最关键的部分'); return; }
