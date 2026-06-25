@@ -783,6 +783,48 @@ function getKey() {
   return localStorage.getItem('ant_key') || document.getElementById('apiKeyInput').value.trim();
 }
 
+// ===== Form Persistence =====
+const FORM_FIELDS = [
+  'docType','school','wordCount','extra','useTurnitin',
+  'sop-edu','sop-research','sop-work','sop-awards','sop-story','sop-why','sop-goals',
+  'ps-bg','ps-story','ps-why','ps-extra',
+  'ca-prompt','ca-story','ca-msg',
+  'ucas-format','ucas-subject','ucas-why','ucas-academic','ucas-reading','ucas-work','ucas-extra',
+  'ucas-q1','ucas-q1-limit','ucas-q2','ucas-q2-limit','ucas-q3','ucas-q3-limit','ucas-custom-q',
+  'rl-writer','rl-relation','rl-student','rl-qualities','rl-examples','rl-tone',
+];
+
+function saveFormData() {
+  const data = {};
+  FORM_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    data[id] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  localStorage.setItem('form_data', JSON.stringify(data));
+}
+
+function loadFormData() {
+  try {
+    const raw = localStorage.getItem('form_data');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    // Set docType first so switchType() shows the right group
+    if (data.docType) document.getElementById('docType').value = data.docType;
+    switchType();
+    // Restore ucas format so toggleUcasFormat() shows right subfields
+    if (data['ucas-format']) document.getElementById('ucas-format').value = data['ucas-format'];
+    if (data.docType === 'ucas') toggleUcasFormat();
+    // Now restore all other fields (wordCount last so switchType doesn't overwrite it)
+    FORM_FIELDS.filter(id => id !== 'docType' && id !== 'ucas-format').forEach(id => {
+      const el = document.getElementById(id);
+      if (!el || data[id] === undefined) return;
+      if (el.type === 'checkbox') el.checked = data[id];
+      else el.value = data[id];
+    });
+  } catch {}
+}
+
 // Load on start
 (function init() {
   const k = localStorage.getItem('ant_key');
@@ -791,8 +833,12 @@ function getKey() {
     setStatus('已加载保存的 Key', '#10b981');
   }
   loadWordlist();
+  loadFormData();
   const h = getHistory();
   if (h.length) updateHistoryBadge(h.length);
+  // Auto-save on any form change
+  document.querySelector('.card-body').addEventListener('input', saveFormData);
+  document.querySelector('.card-body').addEventListener('change', saveFormData);
 })();
 
 // ===== History =====
