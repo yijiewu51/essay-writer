@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>留学文书生成器</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .app-header {
+      background: #1e3a8a;
+      color: white;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+    }
+    .app-title { font-size: 1.1rem; font-weight: 700; }
+    .app-sub { font-size: 0.72rem; opacity: 0.75; margin-top: 2px; }
+    .btn-icon {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+      padding: 7px 14px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      transition: background 0.2s;
+    }
+    .btn-icon:hover { background: rgba(255,255,255,0.25); }
+
+    /* Settings */
+    .settings-panel {
+      display: none;
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 14px 24px;
+      border-bottom: 1px solid #334155;
+    }
+    .settings-panel.open { display: block; }
+    .settings-inner { max-width: 1400px; margin: 0 auto; }
+    .api-row { display: flex; gap: 8px; margin-top: 8px; }
+    .api-row input { flex: 1; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; }
+    .api-row input::placeholder { color: #475569; }
+    .btn-sm {
+      padding: 8px 14px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #94a3b8;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+    .btn-sm:hover { background: #1e293b; color: white; }
+    .btn-sm.danger { color: #f87171; }
+    #apiStatus { margin-top: 6px; font-size: 0.76rem; }
+
+    /* Layout */
+    .main { max-width: 1400px; margin: 0 auto; padding: 20px 24px; display: grid; grid-template-columns: 400px 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+
+    /* Card */
+    .card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; }
+    .card-head { padding: 14px 18px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 8px; }
+    .card-title { font-size: 0.88rem; font-weight: 600; color: #374151; }
+    .card-body { padding: 18px; }
+
+    /* Form */
+    .form-group { margin-bottom: 14px; }
+    label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #6b7280;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    input[type=text], input[type=number], input[type=password], select, textarea {
+      width: 100%;
+      padding: 9px 11px;
+      border: 1px solid #d1d5db;
+      border-radius: 7px;
+      font-size: 0.88rem;
+      font-family: inherit;
+      color: #1e293b;
+      background: white;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    }
+    textarea { resize: vertical; line-height: 1.55; }
+    select { cursor: pointer; }
+
+    .section-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 18px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .field-group { display: none; }
+    .field-group.show { display: block; }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: #374151;
+      cursor: pointer;
+      padding: 10px 0 4px;
+    }
+    .checkbox-row input[type=checkbox] { width: auto; cursor: pointer; }
+
+    /* Generate Button */
+    .btn-generate {
+      width: 100%;
+      padding: 13px;
+      background: #1e3a8a;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      margin-top: 6px;
+      letter-spacing: 0.01em;
+    }
+    .btn-generate:hover { background: #1d4ed8; }
+    .btn-generate:active { transform: scale(0.99); }
+    .btn-generate:disabled { background: #94a3b8; cursor: not-allowed; transform: none; }
+
+    /* Output Panel */
+    .out-panel { position: sticky; top: 70px; }
+
+    /* Stage indicators */
+    .stages { display: flex; padding: 16px 18px 0; gap: 0; }
+    .stage { flex: 1; text-align: center; font-size: 0.72rem; color: #94a3b8; }
+    .stage-dot {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #e2e8f0; display: flex; align-items: center;
+      justify-content: center; margin: 0 auto 4px;
+      font-size: 0.7rem; font-weight: 700; color: #94a3b8;
+      transition: all 0.3s;
+    }
+    .stage.active .stage-dot { background: #3b82f6; color: white; }
+    .stage.active { color: #3b82f6; font-weight: 600; }
+    .stage.done .stage-dot { background: #10b981; color: white; }
+    .stage.done { color: #10b981; }
+
+    .stage-connector {
+      flex: 0 0 30px;
+      height: 2px;
+      background: #e2e8f0;
+      margin-top: 13px;
+      transition: background 0.3s;
+    }
+    .stage-connector.done { background: #10b981; }
+
+    /* Progress bar */
+    .progress-wrap { padding: 12px 18px 0; }
+    .progress-bar { height: 3px; background: #e2e8f0; border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #6366f1); border-radius: 2px; transition: width 0.6s ease; width: 0%; }
+
+    /* Log */
+    .log-wrap { margin: 12px 18px 0; display: none; }
+    .log {
+      background: #0f172a; border-radius: 8px; padding: 10px 14px;
+      font-size: 0.75rem; font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+      max-height: 100px; overflow-y: auto; color: #475569;
+    }
+    .log-line { padding: 1px 0; }
+    .log-line.active { color: #60a5fa; }
+    .log-line.done { color: #34d399; }
+    .log-line.err { color: #f87171; }
+
+    /* Tabs */
+    .tabs { display: flex; border-bottom: 1px solid #e2e8f0; padding: 0 4px; margin-top: 12px; }
+    .tab {
+      padding: 9px 16px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      color: #6b7280;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s;
+      white-space: nowrap;
+      margin-bottom: -1px;
+    }
+    .tab:hover { color: #1d4ed8; }
+    .tab.active { color: #1d4ed8; border-bottom-color: #1d4ed8; font-weight: 600; }
+    .tab-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #10b981; color: white; font-size: 0.6rem;
+      margin-left: 5px; font-weight: 700;
+    }
+    .tab-badge.pending { background: #94a3b8; }
+
+    /* Output */
+    .out-area { min-height: 420px; padding: 20px; }
+    .out-placeholder { color: #94a3b8; text-align: center; padding: 80px 20px; }
+    .out-placeholder .ico { font-size: 2.5rem; margin-bottom: 12px; }
+    .out-text {
+      white-space: pre-wrap;
+      font-size: 0.93rem;
+      line-height: 1.75;
+      color: #1e293b;
+      font-family: Georgia, 'Times New Roman', serif;
+    }
+    .cursor {
+      display: inline-block; width: 2px; height: 1em;
+      background: #3b82f6; margin-left: 1px;
+      animation: blink 0.75s step-end infinite;
+      vertical-align: text-bottom;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    .out-footer {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 18px;
+      border-top: 1px solid #e2e8f0;
+      background: #fafafa;
+    }
+    .word-count { font-size: 0.78rem; color: #6b7280; }
+    .copy-btn {
+      padding: 6px 14px;
+      background: white;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { background: #f1f5f9; }
+    .copy-btn.ok { background: #d1fae5; border-color: #10b981; color: #065f46; }
+
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 7px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Alert */
+    .alert { padding: 10px 14px; border-radius: 8px; font-size: 0.83rem; margin-bottom: 14px; }
+    .alert-warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+
+    /* Word count hint */
+    .hint { font-size: 0.72rem; color: #94a3b8; margin-top: 3px; }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <div>
+    <div class="app-title">留学文书生成器</div>
+    <div class="app-sub">解决 Turnitin 检测 + 人眼识别 | SOP · PS · Common App · 推荐信</div>
+  </div>
+  <button class="btn-icon" onclick="toggleSettings()">API Key 设置</button>
+</header>
+
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-inner">
+    <div style="font-size:0.78rem; color:#64748b;">Key 存储在浏览器本地（localStorage），不经过任何服务器</div>
+    <div class="api-row">
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." />
+      <button class="btn-sm" onclick="saveKey()">保存</button>
+      <button class="btn-sm danger" onclick="clearKey()">清除</button>
+    </div>
+    <div id="apiStatus"></div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Left: Form -->
+  <div class="card">
+    <div class="card-head">
+      <span>📋</span>
+      <span class="card-title">填写申请信息</span>
+    </div>
+    <div class="card-body">
+
+      <div class="form-group">
+        <label>文书类型</label>
+        <select id="docType" onchange="switchType()">
+          <option value="sop">Statement of Purpose（SOP — 研究生申请）</option>
+          <option value="ps">Personal Statement（PS — 本科 / 综合）</option>
+          <option value="ca">Common App Essay（本科 — 650词）</option>
+          <option value="rl">推荐信（Recommendation Letter）</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>目标学校 & 专业 / 项目</label>
+        <input type="text" id="school" placeholder="e.g. MIT Computer Science PhD / Stanford MBA" />
+      </div>
+
+      <div class="form-group">
+        <label>目标字数</label>
+        <input type="number" id="wordCount" value="650" min="150" max="2000" />
+        <div class="hint">SOP 通常 500-1000 词，Common App 固定 650 词，推荐信 400-600 词</div>
+      </div>
+
+      <!-- SOP fields -->
+      <div id="grp-sop" class="field-group show">
+        <div class="section-label">学术 & 研究背景</div>
+        <div class="form-group">
+          <label>教育背景</label>
+          <textarea id="sop-edu" rows="2" placeholder="学校、专业、GPA、排名（e.g. 浙大计算机 GPA 3.8/4.0，排名前10%）"></textarea>
+        </div>
+        <div class="form-group">
+          <label>研究经历</label>
+          <textarea id="sop-research" rows="3" placeholder="课题名称、导师、持续时间、具体贡献、发表/在投论文、关键发现"></textarea>
+        </div>
+        <div class="form-group">
+          <label>实习 / 工作经历</label>
+          <textarea id="sop-work" rows="2" placeholder="公司、职位、时间、主要成就（尽量量化）"></textarea>
+        </div>
+        <div class="form-group">
+          <label>奖项 & 荣誉</label>
+          <textarea id="sop-awards" rows="2" placeholder="竞赛奖项、奖学金、荣誉称号等"></textarea>
+        </div>
+        <div class="section-label">故事 & 动机</div>
+        <div class="form-group">
+          <label>核心故事 / 关键时刻（重要）</label>
+          <textarea id="sop-story" rows="4" placeholder="一个具体的、改变你研究方向或激发你热情的事件、实验、对话或失败——越具体越好，不要写泛泛的「我从小热爱」"></textarea>
+        </div>
+        <div class="form-group">
+          <label>为什么选这个项目（精确到教授/实验室）</label>
+          <textarea id="sop-why" rows="3" placeholder="具体说到哪位教授的哪个研究方向、哪门课程、哪个资源——不能用通用理由"></textarea>
+        </div>
+        <div class="form-group">
+          <label>职业目标</label>
+          <textarea id="sop-goals" rows="2" placeholder="毕业后短期（2-3年）和长期（5-10年）目标"></textarea>
+        </div>
+      </div>
+
+      <!-- PS fields -->
+      <div id="grp-ps" class="field-group">
+        <div class="section-label">个人背景</div>
+        <div class="form-group">
+          <label>成长经历 / 背景</label>
+          <textarea id="ps-bg" rows="3" placeholder="影响你最深的成长环境、家庭、文化背景、身份认同等"></textarea>
+        </div>
+        <div class="form-group">
+          <label>核心经历 / 故事</label>
+          <textarea id="ps-story" rows="4" placeholder="最能代表你的一个或两个具体经历——用场景描述，不要用概括性语言"></textarea>
+        </div>
+        <div class="form-group">
+          <label>为什么选这个专业</label>
+          <textarea id="ps-why" rows="2" placeholder="兴趣来源、具体触发事件、与个人经历的连接"></textarea>
+        </div>
+        <div class="form-group">
+          <label>你想让招生官了解什么</label>
+          <textarea id="ps-extra" rows="2" placeholder="成绩单、活动列表体现不出来的特质、价值观或潜力"></textarea>
+        </div>
+      </div>
+
+      <!-- Common App fields -->
+      <div id="grp-ca" class="field-group">
+        <div class="section-label">Common App Essay</div>
+        <div class="form-group">
+          <label>选择 Prompt</label>
+          <select id="ca-prompt">
+            <option value="1">Prompt 1 — 背景、身份、兴趣或才能的意义</option>
+            <option value="2">Prompt 2 — 克服挑战或障碍</option>
+            <option value="3">Prompt 3 — 质疑或挑战了某个信念</option>
+            <option value="4">Prompt 4 — 对你意义重大的活动或承诺</option>
+            <option value="5">Prompt 5 — 成就/事件/认识改变了你的成长</option>
+            <option value="6">Prompt 6 — 吸引你的话题、想法或概念</option>
+            <option value="7">Prompt 7 — 自由主题</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>核心故事（具体场景）</label>
+          <textarea id="ca-story" rows="5" placeholder="用第一人称描述一个具体的时刻、场景、对话——越细节越好。不要写总结，写画面。"></textarea>
+        </div>
+        <div class="form-group">
+          <label>这个故事想传达什么</label>
+          <textarea id="ca-msg" rows="2" placeholder="招生官读完这篇文章后，你最想让他们记住的一点是什么？"></textarea>
+        </div>
+      </div>
+
+      <!-- Recommendation Letter fields -->
+      <div id="grp-rl" class="field-group">
+        <div class="section-label">推荐信信息</div>
+        <div class="form-group">
+          <label>推荐人姓名 & 职位</label>
+          <input type="text" id="rl-writer" placeholder="e.g. Prof. John Smith, Associate Professor, MIT EECS" />
+        </div>
+        <div class="form-group">
+          <label>推荐人与申请人的关系</label>
+          <input type="text" id="rl-relation" placeholder="e.g. 本科毕业论文导师，合作18个月 / 授课老师，高级算法课" />
+        </div>
+        <div class="form-group">
+          <label>申请人姓名</label>
+          <input type="text" id="rl-student" placeholder="申请人的英文名" />
+        </div>
+        <div class="form-group">
+          <label>重点突出的2-3个品质</label>
+          <textarea id="rl-qualities" rows="2" placeholder="e.g. 独立解决问题的能力、严谨的实验设计思维、出色的跨团队沟通"></textarea>
+        </div>
+        <div class="form-group">
+          <label>推荐人亲历的具体事例</label>
+          <textarea id="rl-examples" rows="4" placeholder="推荐人亲眼见到的具体事件、解决的具体问题、达到的具体成果——这是推荐信最重要的部分"></textarea>
+        </div>
+        <div class="form-group">
+          <label>语气风格</label>
+          <select id="rl-tone">
+            <option value="academic">学术正式（教授推荐）</option>
+            <option value="warm">温暖真诚（导师推荐）</option>
+            <option value="professional">职业专业（雇主推荐）</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Common for all -->
+      <div class="section-label">其他设置</div>
+
+      <div class="form-group">
+        <label>补充说明（可选）</label>
+        <textarea id="extra" rows="2" placeholder="需要特别解释的（e.g. 有gap year、GPA偏低的原因、转专业背景）"></textarea>
+      </div>
+
+      <label class="checkbox-row">
+        <input type="checkbox" id="useTurnitin" checked />
+        <span>开启 Turnitin 优化（翻译链 EN→中文→法语→EN，用时约1-2分钟）</span>
+      </label>
+
+      <button class="btn-generate" id="genBtn" onclick="generate()">
+        开始生成文书
+      </button>
+
+    </div>
+  </div>
+
+  <!-- Right: Output -->
+  <div class="card out-panel">
+
+    <!-- Stage indicators -->
+    <div class="stages" id="stagesRow">
+      <div class="stage" id="st1">
+        <div class="stage-dot">1</div>
+        <div>生成初稿</div>
+      </div>
+      <div class="stage-connector" id="conn1"></div>
+      <div class="stage" id="st2">
+        <div class="stage-dot">2</div>
+        <div>去AI优化</div>
+      </div>
+      <div class="stage-connector" id="conn2"></div>
+      <div class="stage" id="st3">
+        <div class="stage-dot">3</div>
+        <div>Turnitin优化</div>
+      </div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-bar">
+        <div class="progress-fill" id="pFill"></div>
+      </div>
+    </div>
+
+    <div class="log-wrap" id="logWrap">
+      <div class="log" id="logBox"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" id="tab0" onclick="switchTab(0)">
+        初稿 <span class="tab-badge pending" id="badge0">1</span>
+      </div>
+      <div class="tab" id="tab1" onclick="switchTab(1)">
+        去AI优化 <span class="tab-badge pending" id="badge1">2</span>
+      </div>
+      <div class="tab" id="tab2" onclick="switchTab(2)">
+        Turnitin优化 <span class="tab-badge pending" id="badge2">3</span>
+      </div>
+    </div>
+
+    <!-- Output text area -->
+    <div class="out-area" id="outArea">
+      <div class="out-placeholder">
+        <div class="ico">✍️</div>
+        <div>填写左侧信息后点击「开始生成」</div>
+        <div style="font-size:0.8rem;margin-top:8px;color:#cbd5e1;">三阶段流水线 · 直接调用 Anthropic API</div>
+      </div>
+    </div>
+
+    <div class="out-footer" id="outFooter">
+      <span class="word-count" id="wc">0 词</span>
+      <button class="copy-btn" id="copyBtn" onclick="copyText()">复制全文</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ===== State =====
+const outputs = ['', '', ''];
+let activeTab = 0;
+let generating = false;
+let activeStage = -1;
+
+// ===== API Key =====
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('open');
+}
+
+function saveKey() {
+  const k = document.getElementById('apiKeyInput').value.trim();
+  if (!k) return;
+  localStorage.setItem('ant_key', k);
+  setStatus('已保存', '#10b981');
+  setTimeout(toggleSettings, 600);
+}
+
+function clearKey() {
+  localStorage.removeItem('ant_key');
+  document.getElementById('apiKeyInput').value = '';
+  setStatus('已清除', '#6b7280');
+}
+
+function setStatus(msg, color) {
+  const el = document.getElementById('apiStatus');
+  el.textContent = msg;
+  el.style.color = color;
+}
+
+function getKey() {
+  return localStorage.getItem('ant_key') || document.getElementById('apiKeyInput').value.trim();
+}
+
+// Load on start
+(function init() {
+  const k = localStorage.getItem('ant_key');
+  if (k) {
+    document.getElementById('apiKeyInput').value = k;
+    setStatus('已加载保存的 Key', '#10b981');
+  }
+})();
+
+// ===== Doc Type Toggle =====
+function switchType() {
+  const t = document.getElementById('docType').value;
+  ['sop','ps','ca','rl'].forEach(g => {
+    document.getElementById('grp-' + g).classList.toggle('show', g === t);
+  });
+  // Set default word counts
+  const wc = { sop: 700, ps: 650, ca: 650, rl: 500 };
+  document.getElementById('wordCount').value = wc[t];
+}
+
+// ===== Tabs =====
+function switchTab(i) {
+  activeTab = i;
+  [0,1,2].forEach(j => {
+    document.getElementById('tab' + j).classList.toggle('active', j === i);
+  });
+  renderOutput();
+}
+
+function renderOutput() {
+  const area = document.getElementById('outArea');
+  const footer = document.getElementById('outFooter');
+  const text = outputs[activeTab];
+
+  if (!text) {
+    if (!generating || activeTab !== activeStage) {
+      area.innerHTML = `<div class="out-placeholder"><div class="ico">⏳</div><div>此阶段内容将自动生成</div></div>`;
+      footer.style.display = 'none';
+    }
+    return;
+  }
+
+  const isStreaming = generating && activeTab === activeStage;
+  area.innerHTML = `<div class="out-text">${esc(text)}${isStreaming ? '<span class="cursor"></span>' : ''}</div>`;
+
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  document.getElementById('wc').textContent = words + ' 词';
+  footer.style.display = 'flex';
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ===== Copy =====
+function copyText() {
+  const text = outputs[activeTab];
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '已复制 ✓';
+    btn.classList.add('ok');
+    setTimeout(() => { btn.textContent = '复制全文'; btn.classList.remove('ok'); }, 2000);
+  });
+}
+
+// ===== Stage UI =====
+function setStage(n, state) {
+  // n: 1, 2, 3
+  const el = document.getElementById('st' + n);
+  el.classList.remove('active','done');
+  if (state === 'active') el.classList.add('active');
+  if (state === 'done') el.classList.add('done');
+
+  if (state === 'done' && n < 3) {
+    document.getElementById('conn' + n).classList.add('done');
+  }
+
+  const pct = { 1: { active:8, done:33 }, 2: { active:40, done:66 }, 3: { active:75, done:100 } };
+  if (pct[n]?.[state] !== undefined) {
+    document.getElementById('pFill').style.width = pct[n][state] + '%';
+  }
+}
+
+function setBadge(i, done) {
+  const b = document.getElementById('badge' + i);
+  b.classList.toggle('pending', !done);
+}
+
+// ===== Log =====
+function log(msg, type = 'active') {
+  const wrap = document.getElementById('logWrap');
+  const box = document.getElementById('logBox');
+  wrap.style.display = 'block';
+  const d = document.createElement('div');
+  d.className = 'log-line ' + type;
+  const t = new Date().toLocaleTimeString('zh', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  d.textContent = `[${t}] ${msg}`;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ===== API =====
+async function callClaude(system, user, onChunk) {
+  const key = getKey();
+  if (!key) throw new Error('请先设置 API Key');
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system,
+      messages: [{ role: 'user', content: user }],
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j.error?.message || msg; } catch {}
+    throw new Error(msg);
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  let result = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (raw === '[DONE]') continue;
+      try {
+        const ev = JSON.parse(raw);
+        if (ev.type === 'content_block_delta' && ev.delta?.text) {
+          result += ev.delta.text;
+          onChunk(result);
+        }
+      } catch {}
+    }
+  }
+
+  return result;
+}
+
+// ===== Prompts =====
+function buildContext() {
+  const type = document.getElementById('docType').value;
+  const school = document.getElementById('school').value.trim();
+  const wc = document.getElementById('wordCount').value;
+  const extra = document.getElementById('extra').value.trim();
+
+  const typeLabel = { sop: 'Statement of Purpose', ps: 'Personal Statement', ca: 'Common App Essay', rl: 'Recommendation Letter' }[type];
+
+  let info = `Document type: ${typeLabel}\nTarget school/program: ${school}\nTarget word count: ${wc} words\n\n`;
+
+  if (type === 'sop') {
+    info += `Education: ${document.getElementById('sop-edu').value}\n`;
+    info += `Research experience: ${document.getElementById('sop-research').value}\n`;
+    info += `Internship/Work: ${document.getElementById('sop-work').value}\n`;
+    info += `Awards/Honors: ${document.getElementById('sop-awards').value}\n`;
+    info += `Core story/pivotal moment: ${document.getElementById('sop-story').value}\n`;
+    info += `Why this specific program: ${document.getElementById('sop-why').value}\n`;
+    info += `Career goals: ${document.getElementById('sop-goals').value}\n`;
+  } else if (type === 'ps') {
+    info += `Personal background: ${document.getElementById('ps-bg').value}\n`;
+    info += `Core experience/story: ${document.getElementById('ps-story').value}\n`;
+    info += `Why this field: ${document.getElementById('ps-why').value}\n`;
+    info += `What to convey to admissions: ${document.getElementById('ps-extra').value}\n`;
+  } else if (type === 'ca') {
+    const prompts = {
+      '1': 'Share your background, identity, interest, or talent that completes who you are',
+      '2': 'Describe a challenge, setback, or failure you faced and what you learned',
+      '3': 'Describe a time you questioned or challenged a belief or idea',
+      '4': 'Describe an activity or commitment that is meaningful to you',
+      '5': 'Describe an achievement, event, or realization that sparked growth',
+      '6': 'Describe a topic, idea, or concept you find captivating',
+      '7': 'Share an essay on a topic of your choice',
+    };
+    const pn = document.getElementById('ca-prompt').value;
+    info += `Common App Prompt ${pn}: ${prompts[pn]}\n`;
+    info += `Core story: ${document.getElementById('ca-story').value}\n`;
+    info += `Core message to convey: ${document.getElementById('ca-msg').value}\n`;
+  } else if (type === 'rl') {
+    info += `Recommender: ${document.getElementById('rl-writer').value}\n`;
+    info += `Relationship to applicant: ${document.getElementById('rl-relation').value}\n`;
+    info += `Applicant name: ${document.getElementById('rl-student').value}\n`;
+    info += `Key qualities to highlight: ${document.getElementById('rl-qualities').value}\n`;
+    info += `Specific examples: ${document.getElementById('rl-examples').value}\n`;
+    info += `Tone: ${document.getElementById('rl-tone').value}\n`;
+  }
+
+  if (extra) info += `\nAdditional notes: ${extra}\n`;
+  return { typeLabel, info, wc };
+}
+
+function promptGenerate({ typeLabel, info, wc }) {
+  return `Write a ${typeLabel} for a university application.
+
+APPLICANT INFORMATION:
+${info}
+
+CRITICAL WRITING RULES — every single one is mandatory:
+
+RHYTHM:
+- Vary sentence length dramatically. Short sentences. Even fragments. Then a longer sentence that unfolds slowly and delivers something real. Never write three consecutive sentences of similar length.
+- Open with a specific scene, concrete detail, or moment in time — never a generic claim about your passion or field.
+- End with something specific and forward-looking, not a generic "I look forward to contributing."
+
+BANNED WORDS (do not use any of these under any circumstances):
+delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, holistic, paradigm, synergy, navigate, landscape, realm, testament, it goes without saying, it's worth noting, it's important to note, in today's world, throughout my journey, passion for, needless to say, as an AI, showcased, honed, diverse perspectives, fostered, spearheaded, garnered
+
+STRUCTURE:
+- No em-dashes (—). Use periods, commas, colons, or parentheses instead.
+- No "rule of three" — never list exactly three parallel items.
+- No signposting: firstly, secondly, thirdly, additionally, in conclusion, to summarize, in summary, in addition.
+- No persuasive framing: "This demonstrates that...", "This shows that...", "This experience taught me...", "This highlights..."
+- No excessive parallel structure. If two clauses start the same way, restructure one.
+
+SPECIFICITY:
+- Use real details: actual numbers, real lab or company names, specific dates, named people or places.
+- Show through actions and concrete scenes — do not tell through adjectives.
+- Every claim must be backed by a specific example, number, or scene.
+- If this is a recommendation letter, write entirely from the recommender's first-person perspective.
+
+Target length: approximately ${wc} words.
+Output ONLY the essay/letter text. No title, no heading, no commentary.`;
+}
+
+function promptHumanize(text, wc) {
+  return `You are a professional writing editor. Your job is to remove every trace of AI-generated writing from this text.
+
+PATTERNS TO FIND AND FIX:
+
+Vocabulary:
+- Remove any banned words still present: delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, navigate, landscape, realm, testament, showcased, honed, spearheaded, garnered, diverse perspectives
+
+Structure:
+- Em-dashes (—): replace each with a period, comma, colon, or parentheses
+- Three consecutive similar-length sentences: break the pattern, vary lengths
+- Rule of three lists: restructure so it's not exactly three parallel items
+- Signposting words (firstly, secondly, in conclusion, to summarize, additionally): remove or rephrase
+- Persuasive framing ("This demonstrates that", "This shows that", "This highlights"): cut or integrate naturally
+- Excessive parallel structure: if three clauses start identically, vary at least one
+
+Voice:
+- Hollow adjective claims ("incredible experience", "remarkable opportunity"): replace with the specific thing
+- Filler hedges (somewhat, rather, quite, very, truly, really): cut most of them
+- Generic transitions ("Through this experience", "Building on this", "This journey"): cut or rephrase naturally
+- Future-trite endings ("I look forward to contributing"): replace with something specific
+
+PROCESS:
+1. First pass: fix all patterns above
+2. SECOND PASS: ask yourself "what 3 phrases or sentences still sound AI-generated?" Fix those too.
+3. Do not change any facts, stories, or arguments. Keep the same length (~${wc} words).
+
+Output ONLY the revised text. No commentary, no explanation, no headers.
+
+TEXT:
+${text}`;
+}
+
+// ===== Main =====
+async function generate() {
+  if (generating) return;
+
+  const key = getKey();
+  if (!key) {
+    alert('请先点击右上角设置 API Key');
+    toggleSettings();
+    return;
+  }
+
+  const type = document.getElementById('docType').value;
+  const school = document.getElementById('school').value.trim();
+
+  // Basic validation
+  const stories = { sop: 'sop-story', ps: 'ps-story', ca: 'ca-story', rl: 'rl-examples' };
+  const storyVal = document.getElementById(stories[type])?.value?.trim();
+  if (!school) { alert('请填写目标学校 & 专业'); return; }
+  if (!storyVal) { alert('请填写核心故事 / 具体事例，这是最关键的部分'); return; }
+
+  const useTurnitin = document.getElementById('useTurnitin').checked;
+  const ctx = buildContext();
+
+  // Reset UI
+  outputs[0] = outputs[1] = outputs[2] = '';
+  generating = true;
+  activeStage = 0;
+  document.getElementById('genBtn').disabled = true;
+  document.getElementById('genBtn').innerHTML = '<span class="spinner"></span>生成中...';
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('logWrap').style.display = 'none';
+  document.getElementById('outFooter').style.display = 'none';
+  document.getElementById('pFill').style.width = '0%';
+  [1,2,3].forEach(n => setStage(n, 'idle'));
+  [0,1,2].forEach(n => setBadge(n, false));
+  ['conn1','conn2'].forEach(id => document.getElementById(id).classList.remove('done'));
+  switchTab(0);
+
+  const sysWrite = 'You are an expert college admissions writer with 20+ years of experience helping students get into top universities worldwide. You write authentic, specific, compelling application documents.';
+  const sysEdit = 'You are a professional writing editor who specializes in removing AI-generated writing patterns from text. You are meticulous and always do a second audit pass.';
+  const sysTrans = 'You are a professional translator. Translate accurately, naturally, and fluently.';
+
+  try {
+    // === Stage 1: Generate draft ===
+    setStage(1, 'active');
+    log('正在生成初稿...');
+    activeStage = 0;
+
+    outputs[0] = await callClaude(sysWrite, promptGenerate(ctx), t => {
+      outputs[0] = t;
+      if (activeTab === 0) renderOutput();
+    });
+
+    setStage(1, 'done');
+    setBadge(0, true);
+    log('初稿完成 (' + outputs[0].trim().split(/\s+/).length + ' 词)', 'done');
+
+    // === Stage 2: Humanize ===
+    setStage(2, 'active');
+    log('正在去除 AI 写作特征...');
+    activeStage = 1;
+    switchTab(1);
+
+    outputs[1] = await callClaude(sysEdit, promptHumanize(outputs[0], ctx.wc), t => {
+      outputs[1] = t;
+      if (activeTab === 1) renderOutput();
+    });
+
+    setStage(2, 'done');
+    setBadge(1, true);
+    log('去AI优化完成 (' + outputs[1].trim().split(/\s+/).length + ' 词)', 'done');
+
+    // === Stage 3: Translation chain (Turnitin) ===
+    if (useTurnitin) {
+      setStage(3, 'active');
+      activeStage = 2;
+      log('Turnitin 优化：英文 → 中文...');
+
+      const zh = await callClaude(sysTrans,
+        `Translate this English text to natural, fluent Simplified Chinese. Preserve all facts, names, and meaning exactly. Do not add or remove content.\n\n${outputs[1]}`,
+        () => {}
+      );
+      log('英文 → 中文 完成', 'done');
+      log('中文 → 法语...');
+
+      const fr = await callClaude(sysTrans,
+        `Translate this Chinese text to natural, fluent French. Preserve all facts and meaning exactly.\n\n${zh}`,
+        () => {}
+      );
+      log('中文 → 法语 完成', 'done');
+      log('法语 → 英文 + 最终润色...');
+
+      switchTab(2);
+      outputs[2] = await callClaude(
+        'You are an expert college admissions writer. Translate the French text to natural, authentic English and do a final polish pass.',
+        `Translate this French text back to English. This is a personal application essay/letter — the voice should be genuine, personal, and specific.
+
+After translating, do a final polish:
+- Vary sentence lengths (mix short and long)
+- Remove any stiff or overly formal phrasing
+- Ensure natural human rhythm
+- Keep all facts, names, and stories intact
+- Target approximately ${ctx.wc} words
+- Output ONLY the final text, no commentary
+
+French text:
+${fr}`,
+        t => {
+          outputs[2] = t;
+          if (activeTab === 2) renderOutput();
+        }
+      );
+
+      setStage(3, 'done');
+      setBadge(2, true);
+      log('Turnitin 优化完成！(' + outputs[2].trim().split(/\s+/).length + ' 词)', 'done');
+      switchTab(2);
+
+    } else {
+      outputs[2] = outputs[1];
+      setStage(3, 'done');
+      setBadge(2, true);
+      log('已跳过 Turnitin 优化（已关闭）', 'done');
+      document.getElementById('pFill').style.width = '100%';
+    }
+
+    log('全部完成！最终文书在「Turnitin优化」标签页', 'done');
+
+  } catch (err) {
+    log('错误：' + err.message, 'err');
+    alert('生成失败：' + err.message + '\n\n请检查 API Key 是否正确，以及网络是否正常。');
+  } finally {
+    generating = false;
+    document.getElementById('genBtn').disabled = false;
+    document.getElementById('genBtn').textContent = '重新生成';
+    renderOutput();
+    if (outputs[activeTab]) document.getElementById('outFooter').style.display = 'flex';
+  }
+}
+</script>
+
+</body>
+</html>
