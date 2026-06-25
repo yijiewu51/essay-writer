@@ -553,7 +553,17 @@
 
       <!-- UCAS fields -->
       <div id="grp-ucas" class="field-group">
-        <div class="section-label">申请学科 & 动机</div>
+
+        <div class="form-group">
+          <label>格式版本</label>
+          <select id="ucas-format" onchange="toggleUcasFormat()">
+            <option value="classic">传统格式（2025年及之前入学，一篇自由文）</option>
+            <option value="new3q">新三问格式（2026年入学起，三个独立问题）</option>
+            <option value="custom">自定义题目（学校或项目有特殊要求）</option>
+          </select>
+        </div>
+
+        <div class="section-label">申请学科 & 背景材料</div>
         <div class="form-group">
           <label>申请学科</label>
           <input type="text" id="ucas-subject" placeholder="e.g. Computer Science / Economics / Medicine" />
@@ -562,7 +572,6 @@
           <label>为什么选这个学科（学术动机）</label>
           <textarea id="ucas-why" rows="3" placeholder="最初让你对这个学科产生兴趣的具体事件、书、课程或问题——UCAS最看重学术动机"></textarea>
         </div>
-        <div class="section-label">学术准备</div>
         <div class="form-group">
           <label>相关课程 & 学习内容</label>
           <textarea id="ucas-academic" rows="3" placeholder="A-level / IB / AP 相关科目、具体课题、学到的核心概念——要体现与申请学科的直接联系"></textarea>
@@ -571,7 +580,6 @@
           <label>课外延伸阅读 & 自主探索</label>
           <textarea id="ucas-reading" rows="3" placeholder="你主动读过的书、论文、纪录片、在线课程——具体书名/作者/内容，这是英国大学最看重的部分之一"></textarea>
         </div>
-        <div class="section-label">实践 & 课外活动</div>
         <div class="form-group">
           <label>相关工作 / 实习 / 志愿者经历</label>
           <textarea id="ucas-work" rows="3" placeholder="与学科相关的工作影子、实习、项目——说明你学到了什么，怎么加深了对学科的理解"></textarea>
@@ -580,6 +588,48 @@
           <label>课外活动（可选）</label>
           <textarea id="ucas-extra" rows="2" placeholder="社团、比赛、领导力经历——只写能体现学术潜力或可迁移技能的，篇幅不超过15%"></textarea>
         </div>
+
+        <!-- New 3-question format -->
+        <div id="ucas-3q" style="display:none;">
+          <div class="section-label" style="color:#1d4ed8;">新三问格式 — 每题独立生成</div>
+          <div style="font-size:0.76rem;color:#6b7280;margin-bottom:12px;">
+            将依次生成三个独立回答，字符限制各约 1000 字符（约 130 词）
+          </div>
+          <div class="form-group">
+            <label>问题一（可修改）</label>
+            <textarea id="ucas-q1" rows="2">Why do you want to study this course or subject?</textarea>
+          </div>
+          <div class="form-group">
+            <label>问题一字符限制</label>
+            <input type="number" id="ucas-q1-limit" value="1000" min="200" max="2000" />
+          </div>
+          <div class="form-group">
+            <label>问题二（可修改）</label>
+            <textarea id="ucas-q2" rows="2">How have your qualifications and studies helped you to prepare for this course or subject?</textarea>
+          </div>
+          <div class="form-group">
+            <label>问题二字符限制</label>
+            <input type="number" id="ucas-q2-limit" value="1000" min="200" max="2000" />
+          </div>
+          <div class="form-group">
+            <label>问题三（可修改）</label>
+            <textarea id="ucas-q3" rows="2">What else have you done to prepare outside of education, and why are these experiences useful?</textarea>
+          </div>
+          <div class="form-group">
+            <label>问题三字符限制</label>
+            <input type="number" id="ucas-q3-limit" value="1000" min="200" max="2000" />
+          </div>
+        </div>
+
+        <!-- Custom questions format -->
+        <div id="ucas-custom" style="display:none;">
+          <div class="section-label" style="color:#1d4ed8;">自定义题目</div>
+          <div class="form-group">
+            <label>粘贴具体题目要求</label>
+            <textarea id="ucas-custom-q" rows="6" placeholder="粘贴学校或项目给出的具体题目或要求&#10;&#10;e.g.&#10;1. Describe your academic interest in this subject (500 words)&#10;2. Tell us about a challenge you overcame (300 words)"></textarea>
+          </div>
+        </div>
+
       </div>
 
       <!-- Recommendation Letter fields -->
@@ -880,6 +930,23 @@ function getWordlist() {
   };
 }
 
+// ===== UCAS Format Toggle =====
+function toggleUcasFormat() {
+  const fmt = document.getElementById('ucas-format').value;
+  document.getElementById('ucas-3q').style.display = fmt === 'new3q' ? 'block' : 'none';
+  document.getElementById('ucas-custom').style.display = fmt === 'custom' ? 'block' : 'none';
+  // update word count hint
+  if (fmt === 'new3q') {
+    document.getElementById('wcHint').textContent = '新三问格式：每题约 1000 字符（约 130 词），共 3 题独立生成';
+    document.getElementById('wordCount').value = 130;
+  } else if (fmt === 'custom') {
+    document.getElementById('wcHint').textContent = '按自定义题目的字数要求填写';
+  } else {
+    document.getElementById('wcHint').textContent = 'UCAS 上限 4000 字符（约 550 词）— 学科为核心，不需指定学校名称';
+    document.getElementById('wordCount').value = 550;
+  }
+}
+
 // ===== Doc Type Toggle =====
 function switchType() {
   const t = document.getElementById('docType').value;
@@ -1079,6 +1146,7 @@ function buildContext() {
     info += `Relevant work experience / volunteering: ${document.getElementById('ucas-work').value}\n`;
     info += `Extracurricular activities: ${document.getElementById('ucas-extra').value}\n`;
   } else if (type === 'rl') {
+
     info += `Recommender: ${document.getElementById('rl-writer').value}\n`;
     info += `Relationship to applicant: ${document.getElementById('rl-relation').value}\n`;
     info += `Applicant name: ${document.getElementById('rl-student').value}\n`;
@@ -1088,56 +1156,116 @@ function buildContext() {
   }
 
   if (extra) info += `\nAdditional notes: ${extra}\n`;
-  return { typeLabel, info, wc, type };
+
+  // UCAS format metadata
+  let ucasFormat = null;
+  if (type === 'ucas') {
+    ucasFormat = document.getElementById('ucas-format').value;
+    if (ucasFormat === 'new3q') {
+      return { typeLabel, info, wc, type, ucasFormat,
+        questions: [
+          { q: document.getElementById('ucas-q1').value, limit: document.getElementById('ucas-q1-limit').value },
+          { q: document.getElementById('ucas-q2').value, limit: document.getElementById('ucas-q2-limit').value },
+          { q: document.getElementById('ucas-q3').value, limit: document.getElementById('ucas-q3-limit').value },
+        ]
+      };
+    } else if (ucasFormat === 'custom') {
+      return { typeLabel, info, wc, type, ucasFormat,
+        customQ: document.getElementById('ucas-custom-q').value };
+    }
+  }
+
+  return { typeLabel, info, wc, type, ucasFormat };
 }
 
-function promptGenerateUCAS({ info, wc }) {
-  const wl = getWordlist();
-  const extraBanned = wl.banned.length
-    ? `\nADDITIONAL BANNED WORDS: ${wl.banned.join(', ')}`
-    : '';
-  const preferredSection = wl.preferred.length
-    ? `\nPREFERRED VOCABULARY: When natural and appropriate, prefer: ${wl.preferred.join(', ')}`
-    : '';
+function ucasStyleRules(extraBanned, preferredSection) {
+  return `UCAS-SPECIFIC RULES:
+- Subject-focused: the central question is "Why are you academically suited for this subject?" — not a life story
+- Do NOT name specific universities
+- UK English spelling (analyse, recognise, behaviour, programme)
+- Vary sentence lengths — mix short statements with longer analytical ones
+- No em-dashes (—). Use commas, colons, or parentheses instead.
+- No signposting: firstly, secondly, in conclusion, to summarize
+- Every claim backed by a specific named text, experience, or concrete detail
+- Confident, precise, academic but not stiff
 
+BANNED WORDS (never use):
+delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, holistic, synergy, navigate, landscape, realm, showcased, honed, spearheaded, garnered, ignited my passion, from a young age, I have always been fascinated, it is worth noting${extraBanned}
+${preferredSection}`;
+}
+
+function promptGenerateUCAS(ctx) {
+  const { info, wc, ucasFormat, questions, customQ } = ctx;
+  const wl = getWordlist();
+  const extraBanned = wl.banned.length ? `\nADDITIONAL BANNED WORDS: ${wl.banned.join(', ')}` : '';
+  const preferredSection = wl.preferred.length ? `\nPREFERRED VOCABULARY: When natural, prefer: ${wl.preferred.join(', ')}` : '';
+  const rules = ucasStyleRules(extraBanned, preferredSection);
+
+  // New 3-question format
+  if (ucasFormat === 'new3q' && questions) {
+    const parts = questions.map((item, i) => {
+      const approxWords = Math.round(parseInt(item.limit) / 7.5);
+      return `--- QUESTION ${i+1} ---
+Question: ${item.q}
+Character limit: ${item.limit} characters (approximately ${approxWords} words)`;
+    }).join('\n\n');
+
+    return `Write answers to the UCAS new-format Personal Statement questions below. Output each answer labelled exactly as "Question 1:", "Question 2:", "Question 3:".
+
+APPLICANT INFORMATION:
+${info}
+
+${rules}
+
+QUESTIONS TO ANSWER:
+${parts}
+
+For each answer:
+- Stay within the character limit
+- Write a complete, polished response — not bullet points
+- Each answer should be self-contained but together they tell a coherent story
+- Output format: "Question 1:\n[answer]\n\nQuestion 2:\n[answer]\n\nQuestion 3:\n[answer]"
+- No other commentary`;
+  }
+
+  // Custom questions
+  if (ucasFormat === 'custom' && customQ) {
+    return `Write responses to the following university application questions.
+
+APPLICANT INFORMATION:
+${info}
+
+${rules}
+
+QUESTIONS / REQUIREMENTS:
+${customQ}
+
+Follow each question's word/character limit exactly. Output each answer clearly labelled with the question number or title. No other commentary.`;
+  }
+
+  // Classic free-form
   return `Write a UCAS Personal Statement for a UK university application.
 
 APPLICANT INFORMATION:
 ${info}
 
-UCAS-SPECIFIC RULES (mandatory — UK admissions is very different from US):
-
-PURPOSE:
-- This is a subject-focused statement, NOT a life story. The central question is: "Why are you academically suited for this subject?"
-- Do NOT name specific universities. One statement goes to all UK choices.
-- Roughly 85% academics, 15% extracurriculars.
+${rules}
 
 STRUCTURE (follow this order):
 1. Opening: a specific intellectual moment, question, or observation that drew you to this subject — not "I have always been fascinated by..."
-2. Academic preparation: what you have studied and what specific ideas/concepts you engaged with deeply
-3. Independent intellectual engagement: books you read beyond the syllabus (cite real titles and authors), papers, lectures, ideas that challenged or extended your thinking — this is the most important section for UK admissions
-4. Relevant experience: work shadow, internship, research, projects — what you learned academically from them
-5. Brief extracurriculars: only if they demonstrate transferable intellectual skills
-6. Forward-looking close: what specific aspect of this subject you want to explore at university level
+2. Academic preparation: what you studied and what specific ideas you engaged with deeply
+3. Independent intellectual engagement: books/papers beyond the syllabus (cite real titles and authors) — most important section
+4. Relevant experience: work shadow, internship, projects — what you learned academically
+5. Extracurriculars (15% max): only if they demonstrate transferable intellectual skills
+6. Close: what specific aspect of this subject you want to explore at university
 
-BANNED WORDS (never use):${extraBanned}
-delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, holistic, paradigm, synergy, navigate, landscape, realm, showcased, honed, spearheaded, garnered, ignited my passion, from a young age, I have always been fascinated
-
-WRITING STYLE:
-- Confident, precise, academic but not stiff
-- Vary sentence lengths — mix short punchy statements with longer analytical ones
-- No em-dashes (—). Use commas, colons, or parentheses.
-- No "rule of three" lists
-- No signposting: firstly, secondly, in conclusion, to summarize
-- Every claim backed by a specific example, named text, or concrete experience
-- UK English spelling (analyse, recognise, behaviour)
-${preferredSection}
-Target length: approximately ${wc} words (stay under 4000 characters).
+Target length: approximately ${wc} words (stay under 4000 characters total).
 Output ONLY the personal statement text. No title, no heading, no commentary.`;
 }
 
-function promptGenerate({ typeLabel, info, wc, type }) {
-  if (type === 'ucas') return promptGenerateUCAS({ info, wc });
+function promptGenerate(ctx) {
+  const { typeLabel, info, wc, type } = ctx;
+  if (type === 'ucas') return promptGenerateUCAS(ctx);
   const wl = getWordlist();
   const extraBanned = wl.banned.length
     ? `\nADDITIONAL BANNED WORDS (also forbidden): ${wl.banned.join(', ')}`
@@ -1234,7 +1362,9 @@ async function generate() {
   const school = document.getElementById('school').value.trim();
 
   // Basic validation
-  const stories = { sop: 'sop-story', ps: 'ps-story', ca: 'ca-story', ucas: 'ucas-why', rl: 'rl-examples' };
+  const ucasFmt = type === 'ucas' ? document.getElementById('ucas-format').value : null;
+  const ucasStoryField = ucasFmt === 'custom' ? 'ucas-custom-q' : 'ucas-why';
+  const stories = { sop: 'sop-story', ps: 'ps-story', ca: 'ca-story', ucas: ucasStoryField, rl: 'rl-examples' };
   const storyVal = document.getElementById(stories[type])?.value?.trim();
   if (!school) { alert('请填写目标学校 & 专业'); return; }
   if (!storyVal) { alert('请填写核心故事 / 具体事例，这是最关键的部分'); return; }
