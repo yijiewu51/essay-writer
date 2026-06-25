@@ -278,6 +278,77 @@
     /* Word count hint */
     .hint { font-size: 0.72rem; color: #94a3b8; margin-top: 3px; }
 
+    /* History drawer */
+    .history-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4); z-index: 200;
+    }
+    .history-overlay.open { display: block; }
+    .history-drawer {
+      position: fixed; top: 0; right: -480px; bottom: 0;
+      width: 460px; max-width: 95vw;
+      background: white; z-index: 201;
+      display: flex; flex-direction: column;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+      transition: right 0.28s cubic-bezier(0.4,0,0.2,1);
+    }
+    .history-overlay.open .history-drawer { right: 0; }
+    .history-head {
+      padding: 16px 18px; border-bottom: 1px solid #e2e8f0;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .history-head-title { font-weight: 700; font-size: 0.95rem; }
+    .history-close {
+      background: none; border: none; font-size: 1.2rem;
+      cursor: pointer; color: #6b7280; padding: 4px 8px;
+      border-radius: 6px; transition: background 0.15s;
+    }
+    .history-close:hover { background: #f1f5f9; }
+    .history-list { flex: 1; overflow-y: auto; padding: 12px; }
+    .history-empty { color: #94a3b8; text-align: center; padding: 60px 20px; font-size: 0.88rem; }
+    .history-item {
+      border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 10px;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s;
+      position: relative;
+    }
+    .history-item:hover { border-color: #3b82f6; background: #f8faff; }
+    .history-item-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .history-item-type {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      background: #dbeafe; color: #1d4ed8;
+      font-size: 0.68rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+    }
+    .history-item-school { font-size: 0.85rem; font-weight: 600; color: #1e293b; flex: 1; }
+    .history-item-date { font-size: 0.72rem; color: #94a3b8; margin-top: 4px; }
+    .history-item-preview {
+      font-size: 0.78rem; color: #64748b; margin-top: 6px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; line-height: 1.5;
+      font-family: Georgia, serif;
+    }
+    .history-del {
+      position: absolute; top: 10px; right: 10px;
+      background: none; border: none; color: #d1d5db;
+      cursor: pointer; font-size: 0.8rem; padding: 2px 6px;
+      border-radius: 4px; transition: color 0.15s, background 0.15s;
+      display: none;
+    }
+    .history-item:hover .history-del { display: block; }
+    .history-del:hover { color: #dc2626; background: #fee2e2; }
+    .history-footer {
+      padding: 12px 18px; border-top: 1px solid #e2e8f0;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-shrink: 0;
+    }
+    .history-count { font-size: 0.76rem; color: #94a3b8; }
+    .history-clear {
+      font-size: 0.76rem; color: #dc2626; background: none;
+      border: none; cursor: pointer; padding: 4px 8px; border-radius: 5px;
+    }
+    .history-clear:hover { background: #fee2e2; }
+
     /* Wordlist panel */
     .wordlist-panel {
       display: none;
@@ -307,6 +378,7 @@
     <div class="app-sub">解决 Turnitin 检测 + 人眼识别 | SOP · PS · Common App · 推荐信</div>
   </div>
   <div style="display:flex;gap:8px;">
+    <button class="btn-icon" onclick="toggleHistory()" id="historyBtn">历史记录</button>
     <button class="btn-icon" onclick="toggleWordlist()">词库配置</button>
     <button class="btn-icon" onclick="toggleSettings()">API Key</button>
   </div>
@@ -321,6 +393,23 @@
       <button class="btn-sm danger" onclick="clearKey()">清除</button>
     </div>
     <div id="apiStatus"></div>
+  </div>
+</div>
+
+<!-- History Drawer -->
+<div class="history-overlay" id="historyOverlay" onclick="handleOverlayClick(event)">
+  <div class="history-drawer">
+    <div class="history-head">
+      <span class="history-head-title">历史文书</span>
+      <button class="history-close" onclick="toggleHistory()">✕</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="history-empty">暂无历史记录</div>
+    </div>
+    <div class="history-footer">
+      <span class="history-count" id="historyCount"></span>
+      <button class="history-clear" onclick="clearHistory()">清空全部</button>
+    </div>
   </div>
 </div>
 
@@ -620,7 +709,99 @@ function getKey() {
     setStatus('已加载保存的 Key', '#10b981');
   }
   loadWordlist();
+  const h = getHistory();
+  if (h.length) updateHistoryBadge(h.length);
 })();
+
+// ===== History =====
+const HISTORY_KEY = 'essay_history';
+const MAX_HISTORY = 30;
+
+function toggleHistory() {
+  const overlay = document.getElementById('historyOverlay');
+  overlay.classList.toggle('open');
+  if (overlay.classList.contains('open')) renderHistory();
+}
+
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById('historyOverlay')) toggleHistory();
+}
+
+function saveToHistory(type, school, outs) {
+  const all = getHistory();
+  const typeLabel = { sop:'SOP', ps:'Personal Statement', ca:'Common App', rl:'推荐信' }[type] || type;
+  const item = {
+    id: Date.now(),
+    date: new Date().toLocaleString('zh', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }),
+    type: typeLabel,
+    school,
+    outputs: outs.slice(),
+  };
+  all.unshift(item);
+  if (all.length > MAX_HISTORY) all.length = MAX_HISTORY;
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+  updateHistoryBadge(all.length);
+}
+
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { return []; }
+}
+
+function deleteFromHistory(id) {
+  const all = getHistory().filter(x => x.id !== id);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+  updateHistoryBadge(all.length);
+  renderHistory();
+}
+
+function clearHistory() {
+  if (!confirm('确定清空所有历史记录？')) return;
+  localStorage.removeItem(HISTORY_KEY);
+  updateHistoryBadge(0);
+  renderHistory();
+}
+
+function restoreEssay(id) {
+  const item = getHistory().find(x => x.id === id);
+  if (!item) return;
+  outputs[0] = item.outputs[0] || '';
+  outputs[1] = item.outputs[1] || '';
+  outputs[2] = item.outputs[2] || '';
+  [0,1,2].forEach(i => setBadge(i, !!outputs[i]));
+  switchTab(item.outputs[2] ? 2 : item.outputs[1] ? 1 : 0);
+  document.getElementById('outFooter').style.display = 'flex';
+  toggleHistory();
+}
+
+function updateHistoryBadge(count) {
+  const btn = document.getElementById('historyBtn');
+  btn.textContent = count > 0 ? `历史记录 (${count})` : '历史记录';
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  const all = getHistory();
+  document.getElementById('historyCount').textContent = `共 ${all.length} 条`;
+  updateHistoryBadge(all.length);
+
+  if (!all.length) {
+    list.innerHTML = '<div class="history-empty">暂无历史记录<br><br>生成完成后自动保存</div>';
+    return;
+  }
+
+  list.innerHTML = all.map(item => {
+    const preview = (item.outputs[2] || item.outputs[1] || item.outputs[0] || '').trim().slice(0, 100);
+    return `<div class="history-item" onclick="restoreEssay(${item.id})">
+      <div class="history-item-top">
+        <span class="history-item-school">${esc(item.school || '未填写学校')}</span>
+        <span class="history-item-type">${esc(item.type)}</span>
+      </div>
+      <div class="history-item-date">${item.date}</div>
+      <div class="history-item-preview">${esc(preview)}${preview.length >= 100 ? '...' : ''}</div>
+      <button class="history-del" onclick="event.stopPropagation();deleteFromHistory(${item.id})">删除</button>
+    </div>`;
+  }).join('');
+}
 
 // ===== Wordlist =====
 function toggleWordlist() {
@@ -1076,6 +1257,7 @@ ${fr}`,
     }
 
     log('全部完成！最终文书在「Turnitin优化」标签页', 'done');
+    saveToHistory(type, school, outputs);
 
   } catch (err) {
     log('错误：' + err.message, 'err');
