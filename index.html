@@ -397,12 +397,20 @@
 <div class="settings-panel" id="settingsPanel">
   <div class="settings-inner">
     <div style="font-size:0.78rem; color:#64748b;">Key 存储在浏览器本地（localStorage），不经过任何服务器</div>
+    <div style="font-size:0.75rem; color:#94a3b8; margin-top:6px;">Anthropic API Key（Claude — 必填）</div>
     <div class="api-row">
       <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." />
       <button class="btn-sm" onclick="saveKey()">保存</button>
       <button class="btn-sm danger" onclick="clearKey()">清除</button>
     </div>
     <div id="apiStatus"></div>
+    <div style="font-size:0.75rem; color:#94a3b8; margin-top:10px;">DeepSeek API Key（Stage 4 GPTZero 优化 — 可选）</div>
+    <div class="api-row">
+      <input type="password" id="dsKeyInput" placeholder="sk-..." />
+      <button class="btn-sm" onclick="saveDsKey()">保存</button>
+      <button class="btn-sm danger" onclick="clearDsKey()">清除</button>
+    </div>
+    <div id="dsKeyStatus"></div>
   </div>
 </div>
 
@@ -697,6 +705,20 @@
         <span>开启 Turnitin 优化（翻译链 EN→中文→法语→EN，用时约1-2分钟）</span>
       </label>
 
+      <label class="checkbox-row">
+        <input type="checkbox" id="useDeepSeek" onchange="toggleDsKeyRow()" />
+        <span>开启 DeepSeek 优化（Stage 4 — 换模型指纹降低 GPTZero 检测）</span>
+      </label>
+
+      <div id="dsKeyRow" style="display:none; margin-top:8px;">
+        <label style="font-size:0.8rem;color:#64748b;">DeepSeek API Key</label>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <input type="password" id="dsKeyInput2" placeholder="sk-..." style="flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.85rem;" />
+          <button class="btn-sm" onclick="saveDsKey2()">保存</button>
+        </div>
+        <div id="dsKeyStatus2" style="font-size:0.78rem;margin-top:4px;color:#10b981;"></div>
+      </div>
+
       <button class="btn-generate" id="genBtn" onclick="generate()">
         开始生成文书
       </button>
@@ -723,6 +745,11 @@
         <div class="stage-dot">3</div>
         <div>Turnitin优化</div>
       </div>
+      <div class="stage-connector" id="conn3"></div>
+      <div class="stage" id="st4">
+        <div class="stage-dot">4</div>
+        <div>DeepSeek</div>
+      </div>
     </div>
 
     <div class="progress-wrap">
@@ -746,6 +773,9 @@
       <div class="tab" id="tab2" onclick="switchTab(2)">
         Turnitin优化 <span class="tab-badge pending" id="badge2">3</span>
       </div>
+      <div class="tab" id="tab3" onclick="switchTab(3)">
+        DeepSeek优化 <span class="tab-badge pending" id="badge3">4</span>
+      </div>
     </div>
 
     <!-- Output text area -->
@@ -767,7 +797,7 @@
 
 <script>
 // ===== State =====
-const outputs = ['', '', ''];
+const outputs = ['', '', '', ''];
 let activeTab = 0;
 let generating = false;
 let activeStage = -1;
@@ -802,13 +832,60 @@ function getKey() {
   return localStorage.getItem('ant_key') || document.getElementById('apiKeyInput').value.trim();
 }
 
+function saveDsKey() {
+  const k = document.getElementById('dsKeyInput').value.trim();
+  if (!k) return;
+  localStorage.setItem('ds_key', k);
+  const el = document.getElementById('dsKeyStatus');
+  el.textContent = '已保存';
+  el.style.color = '#10b981';
+}
+
+function clearDsKey() {
+  localStorage.removeItem('ds_key');
+  document.getElementById('dsKeyInput').value = '';
+  const el = document.getElementById('dsKeyStatus');
+  el.textContent = '已清除';
+  el.style.color = '#6b7280';
+}
+
+function getDsKey() {
+  return localStorage.getItem('ds_key')
+    || document.getElementById('dsKeyInput').value.trim()
+    || document.getElementById('dsKeyInput2').value.trim();
+}
+
+function saveDsKey2() {
+  const k = document.getElementById('dsKeyInput2').value.trim();
+  if (!k) return;
+  localStorage.setItem('ds_key', k);
+  // sync to settings panel input too
+  document.getElementById('dsKeyInput').value = k;
+  const el = document.getElementById('dsKeyStatus2');
+  el.textContent = '已保存 ✓';
+  el.style.color = '#10b981';
+}
+
+function toggleDsKeyRow() {
+  const show = document.getElementById('useDeepSeek').checked;
+  document.getElementById('dsKeyRow').style.display = show ? 'block' : 'none';
+  // prefill if we already have a key
+  if (show) {
+    const saved = localStorage.getItem('ds_key');
+    if (saved) {
+      document.getElementById('dsKeyInput2').value = saved;
+      document.getElementById('dsKeyStatus2').textContent = '已加载保存的 Key';
+    }
+  }
+}
+
 // ===== History constants (must be before init) =====
 const HISTORY_KEY = 'essay_history';
 const MAX_HISTORY = 30;
 
 // ===== Form Persistence =====
 const FORM_FIELDS = [
-  'docType','school','wordCount','extra','useTurnitin','voice-sample',
+  'docType','school','wordCount','extra','useTurnitin','useDeepSeek','voice-sample',
   'sop-edu','sop-research','sop-work','sop-awards','sop-story','sop-why','sop-goals',
   'ps-bg','ps-story','ps-why','ps-extra',
   'ca-prompt','ca-story','ca-msg',
@@ -854,6 +931,13 @@ function loadFormData() {
   if (k) {
     document.getElementById('apiKeyInput').value = k;
     setStatus('已加载保存的 Key', '#10b981');
+  }
+  const dk = localStorage.getItem('ds_key');
+  if (dk) {
+    document.getElementById('dsKeyInput').value = dk;
+    const el = document.getElementById('dsKeyStatus');
+    el.textContent = '已加载';
+    el.style.color = '#10b981';
   }
   loadWordlist();
   loadFormData();
@@ -915,8 +999,9 @@ function restoreEssay(id) {
   outputs[0] = item.outputs[0] || '';
   outputs[1] = item.outputs[1] || '';
   outputs[2] = item.outputs[2] || '';
-  [0,1,2].forEach(i => setBadge(i, !!outputs[i]));
-  switchTab(item.outputs[2] ? 2 : item.outputs[1] ? 1 : 0);
+  outputs[3] = item.outputs[3] || '';
+  [0,1,2,3].forEach(i => setBadge(i, !!outputs[i]));
+  switchTab(item.outputs[3] ? 3 : item.outputs[2] ? 2 : item.outputs[1] ? 1 : 0);
   document.getElementById('outFooter').style.display = 'flex';
   toggleHistory();
 }
@@ -938,7 +1023,7 @@ function renderHistory() {
   }
 
   list.innerHTML = all.map(item => {
-    const preview = (item.outputs[2] || item.outputs[1] || item.outputs[0] || '').trim().slice(0, 100);
+    const preview = (item.outputs[3] || item.outputs[2] || item.outputs[1] || item.outputs[0] || '').trim().slice(0, 100);
     return `<div class="history-item" onclick="restoreEssay(${item.id})">
       <div class="history-item-top">
         <span class="history-item-school">${esc(item.school || '未填写学校')}</span>
@@ -1031,7 +1116,7 @@ function switchType() {
 // ===== Tabs =====
 function switchTab(i) {
   activeTab = i;
-  [0,1,2].forEach(j => {
+  [0,1,2,3].forEach(j => {
     document.getElementById('tab' + j).classList.toggle('active', j === i);
   });
   renderOutput();
@@ -1082,11 +1167,11 @@ function setStage(n, state) {
   if (state === 'active') el.classList.add('active');
   if (state === 'done') el.classList.add('done');
 
-  if (state === 'done' && n < 3) {
+  if (state === 'done' && n < 4) {
     document.getElementById('conn' + n).classList.add('done');
   }
 
-  const pct = { 1: { active:8, done:33 }, 2: { active:40, done:66 }, 3: { active:75, done:100 } };
+  const pct = { 1: { active:5, done:25 }, 2: { active:30, done:50 }, 3: { active:55, done:75 }, 4: { active:80, done:100 } };
   if (pct[n]?.[state] !== undefined) {
     document.getElementById('pFill').style.width = pct[n][state] + '%';
   }
@@ -1157,6 +1242,77 @@ async function callClaude(system, user, onChunk) {
         const ev = JSON.parse(raw);
         if (ev.type === 'content_block_delta' && ev.delta?.text) {
           result += ev.delta.text;
+          onChunk(result);
+        }
+      } catch {}
+    }
+  }
+
+  return result;
+}
+
+async function callDeepSeek(dsKey, text, wc, onChunk) {
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + dsKey,
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      max_tokens: 4096,
+      stream: true,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a human writing assistant. Your only job is to rewrite application essays so they read as naturally human-written as possible. You preserve all facts exactly.'
+        },
+        {
+          role: 'user',
+          content: `Rewrite this application essay to lower its GPTZero AI score. Do NOT polish or clean it up — introduce natural human imperfections instead:
+
+1. CONVERSATIONAL BREAKS: Add natural interruptions — a thought reconsidered mid-sentence, a specific memory inserted, a brief aside that a real person would include.
+2. ABRUPT TRANSITIONS: Replace smooth connective phrases with more direct, sometimes blunt transitions. Real writers don't always bridge thoughts gracefully.
+3. SENTENCE VARIETY: Mix very short sentences (3-6 words) with long, winding ones (25+ words). Never three consecutive sentences of similar length.
+4. WORD UNPREDICTABILITY: Occasionally choose a slightly informal or unexpected word where formal prose would be predictable.
+5. PRESERVE EVERYTHING: Keep all facts, names, numbers, institutions, and stories exactly as written.
+6. TARGET LENGTH: approximately ${wc} words.
+
+Output ONLY the rewritten text. No commentary, no title, no explanation.
+
+TEXT:
+${text}`
+        }
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    let msg = `DeepSeek HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j.error?.message || msg; } catch {}
+    throw new Error(msg);
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  let result = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (raw === '[DONE]') continue;
+      try {
+        const ev = JSON.parse(raw);
+        const delta = ev.choices?.[0]?.delta?.content;
+        if (delta) {
+          result += delta;
           onChunk(result);
         }
       } catch {}
@@ -1452,10 +1608,11 @@ async function generate() {
   if (!storyVal) { alert('请填写核心故事 / 具体事例，这是最关键的部分'); return; }
 
   const useTurnitin = document.getElementById('useTurnitin').checked;
+  const useDeepSeek = document.getElementById('useDeepSeek').checked;
   const ctx = buildContext();
 
   // Reset UI
-  outputs[0] = outputs[1] = outputs[2] = '';
+  outputs[0] = outputs[1] = outputs[2] = outputs[3] = '';
   generating = true;
   activeStage = 0;
   document.getElementById('genBtn').disabled = true;
@@ -1464,9 +1621,9 @@ async function generate() {
   document.getElementById('logWrap').style.display = 'none';
   document.getElementById('outFooter').style.display = 'none';
   document.getElementById('pFill').style.width = '0%';
-  [1,2,3].forEach(n => setStage(n, 'idle'));
-  [0,1,2].forEach(n => setBadge(n, false));
-  ['conn1','conn2'].forEach(id => document.getElementById(id).classList.remove('done'));
+  [1,2,3,4].forEach(n => setStage(n, 'idle'));
+  [0,1,2,3].forEach(n => setBadge(n, false));
+  ['conn1','conn2','conn3'].forEach(id => document.getElementById(id).classList.remove('done'));
   switchTab(0);
 
   const sysWrite = 'You are an expert college admissions writer with 20+ years of experience helping students get into top universities worldwide. You write authentic, specific, compelling application documents.';
@@ -1577,7 +1734,32 @@ ${fr}`,
       document.getElementById('pFill').style.width = '100%';
     }
 
-    log('全部完成！最终文书在「Turnitin优化」标签页', 'done');
+    // === Stage 4: DeepSeek rewrite ===
+    if (useDeepSeek) {
+      const dsKey = getDsKey();
+      if (!dsKey) {
+        log('未设置 DeepSeek Key，跳过 Stage 4（请在 API Key 设置中填写）', 'err');
+      } else {
+        setStage(4, 'active');
+        activeStage = 3;
+        log('DeepSeek 优化：换模型指纹降低 GPTZero 检测...');
+        switchTab(3);
+
+        const sourceText = outputs[2] || outputs[1];
+        outputs[3] = await callDeepSeek(dsKey, sourceText, ctx.wc, t => {
+          outputs[3] = t;
+          if (activeTab === 3) renderOutput();
+        });
+
+        setStage(4, 'done');
+        setBadge(3, true);
+        log('DeepSeek 优化完成！(' + outputs[3].trim().split(/\s+/).length + ' 词)', 'done');
+        switchTab(3);
+      }
+    }
+
+    const bestTab = outputs[3] ? 3 : outputs[2] ? 2 : 1;
+    log('全部完成！最终文书在「' + ['初稿','去AI优化','Turnitin优化','DeepSeek优化'][bestTab] + '」标签页', 'done');
     saveToHistory(type, school, outputs);
 
   } catch (err) {
