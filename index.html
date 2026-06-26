@@ -955,7 +955,7 @@ function loadFormData() {
 }
 
 // Load on start
-(function init() {
+(async function init() {
   const k = localStorage.getItem('ant_key');
   if (k) {
     document.getElementById('apiKeyInput').value = k;
@@ -968,11 +968,26 @@ function loadFormData() {
     el.textContent = '已加载';
     el.style.color = '#10b981';
   }
-  loadWordlist();
+
+  // Load wordlist: localStorage first, fallback to my-config.json
+  if (localStorage.getItem('wl_config')) {
+    loadWordlist();
+  } else {
+    try {
+      const res = await fetch('./my-config.json');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.banned?.length) document.getElementById('wl-banned').value = data.banned.join('\n');
+        if (data.preferred?.length) document.getElementById('wl-preferred').value = data.preferred.join('\n');
+        if (data.aitells) document.getElementById('wl-aitells').value = data.aitells;
+        if (data.essays) document.getElementById('wl-essays').value = data.essays;
+      }
+    } catch {}
+  }
+
   loadFormData();
   const h = getHistory();
   if (h.length) updateHistoryBadge(h.length);
-  // Auto-save on any form change
   document.querySelector('.card-body').addEventListener('input', saveFormData);
   document.querySelector('.card-body').addEventListener('change', saveFormData);
 })();
