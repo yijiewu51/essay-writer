@@ -684,12 +684,17 @@
       </div>
 
       <!-- Common for all -->
-      <div class="section-label">去AI个性化（降低 GPTZero 检测）</div>
+      <div class="section-label">降低 GPTZero 检测</div>
 
       <div class="form-group">
-        <label>你的口语样本</label>
-        <textarea id="voice-sample" rows="3" placeholder="粘贴几句你自己随手写的话，中英文都行，不用在意语法。AI会模仿你的句子节奏和语气，来改掉那些「总结性AI句子」。&#10;&#10;e.g. 我当时其实没想那么多，就是觉得这个方向比较适合我 / I don't actually know when I got into this, it just kind of happened"></textarea>
-        <div class="hint">这是降低 GPTZero 最有效的方法：AI 读你自己的语气，用你的方式改写</div>
+        <label style="color:#1d4ed8;font-weight:600;">⭐ 你自己写的草稿（最有效 — 强烈推荐）</label>
+        <textarea id="user-draft" rows="6" placeholder="把你自己写的粗糙草稿粘在这里，中英文混写都没问题。AI 会在你的草稿基础上改写，保留你的句子结构和语气——这比从零生成 GPTZero 低很多。&#10;&#10;哪怕是中文都行：我当时就觉得心理学能解释我观察到的现象，后来参加了brain bee..."></textarea>
+        <div class="hint">你自己的写作 GPTZero 测出 35%，AI 从零生成测出 100%。草稿越完整效果越好。</div>
+      </div>
+
+      <div class="form-group">
+        <label>口语样本（可选，辅助调整语气）</label>
+        <textarea id="voice-sample" rows="2" placeholder="粘贴几句你自己随手写的话，中英文都行。AI 会模仿你的句子节奏改掉总结性句子。"></textarea>
       </div>
 
 
@@ -890,7 +895,7 @@ const MAX_HISTORY = 30;
 
 // ===== Form Persistence =====
 const FORM_FIELDS = [
-  'docType','school','wordCount','extra','useTurnitin','useNonNative','useDeepSeek','voice-sample',
+  'docType','school','wordCount','extra','useTurnitin','useNonNative','useDeepSeek','voice-sample','user-draft',
   'sop-edu','sop-research','sop-work','sop-awards','sop-story','sop-why','sop-goals',
   'ps-bg','ps-story','ps-why','ps-extra',
   'ca-prompt','ca-story','ca-msg',
@@ -1500,6 +1505,33 @@ function promptGenerate(ctx) {
   const preferredSection = wl.preferred.length
     ? `\nPREFERRED VOCABULARY: When natural and appropriate, prefer these words/phrases: ${wl.preferred.join(', ')}`
     : '';
+
+  const userDraft = document.getElementById('user-draft').value.trim();
+  if (userDraft) {
+    return `You are a writing editor helping a Chinese international student improve their ${typeLabel} draft.
+
+APPLICANT INFORMATION (for context and filling gaps):
+${info}
+
+CRITICAL TASK: Improve the student's OWN draft below. Do NOT rewrite from scratch.
+
+RULES — every one is mandatory:
+- PRESERVE the student's sentence structure and paragraph order as much as possible
+- PRESERVE imperfect but natural phrasing — do not over-polish
+- If the draft is in Chinese or mixed language, translate those parts to English naturally
+- Fill in missing details using the applicant information above
+- Fix grammar errors that would confuse a reader, but leave natural non-native patterns (e.g. missing articles, simple word choices) — these are fine
+- Remove any clichés or banned words: delve, leverage, robust, pivotal, tapestry, moreover, furthermore, transformative, invaluable
+- Do NOT add rhetorical structures, parallel frameworks, or polished wrap-up sentences
+- Do NOT restructure paragraphs or change the logical order
+- Target length: approximately ${wc} words
+${extraBanned}${preferredSection}
+
+Output ONLY the improved essay. No commentary, no title.
+
+STUDENT'S DRAFT:
+${userDraft}`;
+  }
 
   return `Write a ${typeLabel} for a university application.
 
