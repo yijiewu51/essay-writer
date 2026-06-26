@@ -1508,26 +1508,33 @@ function promptGenerate(ctx) {
 
   const userDraft = document.getElementById('user-draft').value.trim();
   if (userDraft) {
-    return `You are a writing editor helping a Chinese international student improve their ${typeLabel} draft.
+    return `You are a copy editor. Your job is to make minimal corrections to this student's personal statement draft. You are NOT a rewriter.
 
-APPLICANT INFORMATION (for context and filling gaps):
+APPLICANT INFORMATION (use only to fill explicit gaps or missing details the student left blank):
 ${info}
 
-CRITICAL TASK: Improve the student's OWN draft below. Do NOT rewrite from scratch.
+YOUR ROLE — copy editor only:
+ALLOWED:
+- Fix grammar errors that would genuinely confuse an admissions reader (not stylistic preferences)
+- Translate any Chinese sentences into English naturally
+- Fill in a specific detail if the student left a clear placeholder gap
+- Remove banned words if present: delve, leverage, robust, pivotal, tapestry, moreover, furthermore, transformative, invaluable, showcased, honed${extraBanned}
 
-RULES — every one is mandatory:
-- PRESERVE the student's sentence structure and paragraph order as much as possible
-- PRESERVE imperfect but natural phrasing — do not over-polish
-- If the draft is in Chinese or mixed language, translate those parts to English naturally
-- Fill in missing details using the applicant information above
-- Fix grammar errors that would confuse a reader, but leave natural non-native patterns (e.g. missing articles, simple word choices) — these are fine
-- Remove any clichés or banned words: delve, leverage, robust, pivotal, tapestry, moreover, furthermore, transformative, invaluable
-- Do NOT add rhetorical structures, parallel frameworks, or polished wrap-up sentences
-- Do NOT restructure paragraphs or change the logical order
-- Target length: approximately ${wc} words
-${extraBanned}${preferredSection}
+STRICTLY FORBIDDEN — do not do any of these:
+- Do NOT change sentences that are already grammatically correct, even if you'd write them differently
+- Do NOT add transitions between paragraphs
+- Do NOT add wrap-up or summary sentences at the end of any paragraph
+- Do NOT restructure any part of the essay
+- Do NOT make it "flow better"
+- Do NOT add rhetorical devices, parallel structures, or literary flourishes
+- Do NOT change the tone — if it sounds casual or fragmented, keep it that way
+- Do NOT expand sentences that are short by choice
+- Fragments, one-word sentences, and informal openers are INTENTIONAL — leave them
 
-Output ONLY the improved essay. No commentary, no title.
+If a sentence is clear and correct, copy it word for word.
+Target length: approximately ${wc} words (do not add content just to reach this).
+
+Output ONLY the lightly edited essay. No commentary, no title.
 
 STUDENT'S DRAFT:
 ${userDraft}`;
@@ -1563,6 +1570,21 @@ SPECIFICITY:
 ${preferredSection}
 Target length: approximately ${wc} words.
 Output ONLY the essay/letter text. No title, no heading, no commentary.`;
+}
+
+function promptLightScan(text) {
+  const wl = getWordlist();
+  const extraBanned = wl.banned.length
+    ? `, ${wl.banned.join(', ')}`
+    : '';
+  return `You are a proofreader. Scan this personal statement for banned words only. Replace them with simple, direct alternatives. Do not change anything else — not sentence structure, not tone, not length, not punctuation.
+
+BANNED WORDS (replace if present): delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, navigate, landscape, realm, testament, showcased, honed, spearheaded, garnered, diverse perspectives${extraBanned}
+
+Output ONLY the text with banned words replaced. Every other word must remain identical.
+
+TEXT:
+${text}`;
 }
 
 function promptHumanize(text, wc) {
@@ -1706,11 +1728,12 @@ async function generate() {
 
     // === Stage 2: Humanize ===
     setStage(2, 'active');
-    log('正在去除 AI 写作特征...');
+    const isDraftMode = !!document.getElementById('user-draft').value.trim();
+    log(isDraftMode ? '草稿模式：轻度扫描禁词（保留原始写作风格）...' : '正在去除 AI 写作特征...');
     activeStage = 1;
     switchTab(1);
 
-    outputs[1] = await callClaude(sysEdit, promptHumanize(outputs[0], ctx.wc), t => {
+    outputs[1] = await callClaude(sysEdit, isDraftMode ? promptLightScan(outputs[0]) : promptHumanize(outputs[0], ctx.wc), t => {
       outputs[1] = t;
       if (activeTab === 1) renderOutput();
     });
