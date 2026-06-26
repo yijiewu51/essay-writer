@@ -799,7 +799,16 @@
 
     <div class="out-footer" id="outFooter">
       <span class="word-count" id="wc">0 词</span>
-      <button class="copy-btn" id="copyBtn" onclick="copyText()">复制全文</button>
+      <div style="display:flex;gap:8px;">
+        <button class="copy-btn" style="background:#6366f1;" onclick="scanAI()">🔍 定位AI句子</button>
+        <button class="copy-btn" id="copyBtn" onclick="copyText()">复制全文</button>
+      </div>
+    </div>
+
+    <!-- AI scan results panel -->
+    <div id="aiScanPanel" style="display:none;margin:0 18px 16px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px;">
+      <div style="font-size:0.8rem;font-weight:600;color:#92400e;margin-bottom:8px;">🔍 以下句子 GPTZero 最可能标记为 AI — 优先手动改这些</div>
+      <div id="aiScanResult" style="font-size:0.82rem;color:#78350f;line-height:1.7;"></div>
     </div>
 
   </div>
@@ -1155,6 +1164,55 @@ function renderOutput() {
 
 function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ===== AI Sentence Scanner =====
+async function scanAI() {
+  const text = outputs[activeTab];
+  if (!text) return;
+
+  const panel = document.getElementById('aiScanPanel');
+  const result = document.getElementById('aiScanResult');
+  panel.style.display = 'block';
+  result.textContent = '分析中...';
+
+  const prompt = `You are a GPTZero expert. Read this application essay and identify the 5 sentences that GPTZero would most likely flag as AI-written.
+
+For each sentence, quote it exactly and explain in one short phrase why it reads as AI (e.g. "perfect parallel structure", "generic wrap-up", "too-smooth transition", "tidy analytical close", "native-sounding idiom non-native wouldn't use").
+
+Output format — exactly this, numbered 1-5:
+1. "exact sentence here" — reason
+2. "exact sentence here" — reason
+...
+
+No other text. Just the 5 items.
+
+ESSAY:
+${text}`;
+
+  try {
+    const dsKey = getDsKey();
+    let scanResult = '';
+    if (dsKey) {
+      const res = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + dsKey },
+        body: JSON.stringify({
+          model: 'deepseek-chat', max_tokens: 800, stream: false,
+          messages: [{ role: 'user', content: prompt }]
+        }),
+      });
+      const j = await res.json();
+      scanResult = j.choices?.[0]?.message?.content || '无结果';
+    } else {
+      scanResult = await callClaude('You are a GPTZero detection expert.', prompt, () => {});
+    }
+    result.innerHTML = scanResult.split('\n').filter(l => l.trim()).map(line => {
+      return `<div style="margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.6);border-radius:6px;">${esc(line)}</div>`;
+    }).join('');
+  } catch (e) {
+    result.textContent = '分析失败：' + e.message;
+  }
 }
 
 // ===== Copy =====
