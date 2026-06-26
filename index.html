@@ -370,6 +370,10 @@
     .wordlist-panel.open { display: block; }
     .wordlist-inner { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
     @media (max-width: 900px) { .wordlist-inner { grid-template-columns: 1fr; } }
+    .wl-essays { max-width: 1400px; margin: 14px auto 0; }
+    .wl-essays label { color: #f59e0b; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 6px; display: block; }
+    .wl-essays textarea { width: 100%; box-sizing: border-box; background: #1e293b; border: 1px solid #f59e0b44; color: #e2e8f0; font-size: 0.82rem; border-radius: 6px; padding: 8px; }
+    .wl-essays textarea::placeholder { color: #475569; }
     .wl-col label { color: #94a3b8; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 6px; display: block; }
     .wl-col textarea { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; font-size: 0.82rem; }
     .wl-col textarea::placeholder { color: #475569; }
@@ -450,6 +454,12 @@
       <div class="wl-hint">这些特征会加入去AI优化阶段的检查列表</div>
     </div>
   </div>
+  <div class="wl-essays">
+    <label>⭐ 参考文章库（你自己写的文章 — Stage 2 会借用你的表达方式替换AI短语）</label>
+    <textarea id="wl-essays" rows="8" placeholder="把你写过的任何文章粘进来，中英文都行。越多越好。&#10;&#10;AI 会从这里学习你的句子结构、用词习惯、过渡方式，在去AI优化阶段用你的语气替换那些高频AI短语。"></textarea>
+    <div class="wl-hint" style="color:#92400e;">这是降低 Copyleaks / GPTZero 最有效的方法：用你自己的短语替换 AI 高频短语</div>
+  </div>
+
   <div class="wl-actions">
     <button class="btn-sm" onclick="saveWordlist()">保存词库</button>
     <button class="btn-sm danger" onclick="clearWordlist()">清空</button>
@@ -1067,6 +1077,7 @@ function saveWordlist() {
     banned: document.getElementById('wl-banned').value,
     preferred: document.getElementById('wl-preferred').value,
     aitells: document.getElementById('wl-aitells').value,
+    essays: document.getElementById('wl-essays').value,
   };
   localStorage.setItem('wl_config', JSON.stringify(data));
   const el = document.getElementById('wlSaved');
@@ -1075,7 +1086,7 @@ function saveWordlist() {
 }
 
 function clearWordlist() {
-  ['wl-banned','wl-preferred','wl-aitells'].forEach(id => document.getElementById(id).value = '');
+  ['wl-banned','wl-preferred','wl-aitells','wl-essays'].forEach(id => document.getElementById(id).value = '');
   localStorage.removeItem('wl_config');
 }
 
@@ -1087,6 +1098,7 @@ function loadWordlist() {
     if (data.banned) document.getElementById('wl-banned').value = data.banned;
     if (data.preferred) document.getElementById('wl-preferred').value = data.preferred;
     if (data.aitells) document.getElementById('wl-aitells').value = data.aitells;
+    if (data.essays) document.getElementById('wl-essays').value = data.essays;
   } catch {}
 }
 
@@ -1097,6 +1109,7 @@ function getWordlist() {
     banned: parse('wl-banned'),
     preferred: parse('wl-preferred'),
     aitells: document.getElementById('wl-aitells').value.trim(),
+    essays: document.getElementById('wl-essays').value.trim(),
   };
 }
 
@@ -1632,13 +1645,17 @@ Output ONLY the essay/letter text. No title, no heading, no commentary.`;
 
 function promptLightScan(text) {
   const wl = getWordlist();
-  const extraBanned = wl.banned.length
-    ? `, ${wl.banned.join(', ')}`
-    : '';
-  return `You are a proofreader. Scan this personal statement for banned words only. Replace them with simple, direct alternatives. Do not change anything else — not sentence structure, not tone, not length, not punctuation.
+  const extraBanned = wl.banned.length ? `, ${wl.banned.join(', ')}` : '';
+  const essaysSection = wl.essays ? `
+REFERENCE ESSAYS (written by this student — borrow their phrasing when replacing banned words):
+"""
+${wl.essays.slice(0, 3000)}
+"""
+` : '';
+  return `You are a proofreader. Scan this personal statement for banned words only. Replace them with simple alternatives — preferably borrowing phrasing patterns from the reference essays below if provided. Do not change anything else.
 
 BANNED WORDS (replace if present): delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, navigate, landscape, realm, testament, showcased, honed, spearheaded, garnered, diverse perspectives${extraBanned}
-
+${essaysSection}
 Output ONLY the text with banned words replaced. Every other word must remain identical.
 
 TEXT:
@@ -1655,14 +1672,13 @@ function promptHumanize(text, wc) {
     : '';
 
   const voiceSample = document.getElementById('voice-sample').value.trim();
-  const voiceSection = voiceSample ? `
-VOICE CALIBRATION:
-The writer's natural voice is shown below. When rewriting summary sentences, transition sentences, and paragraph closings, mirror this voice — not the content, just the style and rhythm.
+  const wlEssays = getWordlist().essays;
+  const voiceSection = (voiceSample || wlEssays) ? `
+VOICE & PHRASE REFERENCE (critical — use these to replace AI-flagged phrases):
+The writer's own essays are shown below. When you need to rewrite a sentence or replace an AI-sounding phrase, borrow the sentence structure, vocabulary level, and rhythm from these essays. Specifically: replace high-frequency AI phrases (like "not just X but Y", "uses scientific methods to", "reduced accuracy on X compared to Y", "the relationship between X and Y") with phrasings similar to how this writer naturally expresses things.
 
-Writer's natural voice sample:
-"""
-${voiceSample}
-"""
+${voiceSample ? `Writer's voice sample:\n"""\n${voiceSample}\n"""` : ''}
+${wlEssays ? `Writer's reference essays:\n"""\n${wlEssays.slice(0, 4000)}\n"""` : ''}
 ` : '';
 
   const useNonNative = document.getElementById('useNonNative').checked;
