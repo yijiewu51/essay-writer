@@ -706,6 +706,11 @@
       </label>
 
       <label class="checkbox-row">
+        <input type="checkbox" id="useNonNative" />
+        <span>非母语写作风格（模拟中国学生英文写作 — 对 GPTZero 效果最强）</span>
+      </label>
+
+      <label class="checkbox-row">
         <input type="checkbox" id="useDeepSeek" onchange="toggleDsKeyRow()" />
         <span>开启 DeepSeek 优化（Stage 4 — 换模型指纹降低 GPTZero 检测）</span>
       </label>
@@ -885,7 +890,7 @@ const MAX_HISTORY = 30;
 
 // ===== Form Persistence =====
 const FORM_FIELDS = [
-  'docType','school','wordCount','extra','useTurnitin','useDeepSeek','voice-sample',
+  'docType','school','wordCount','extra','useTurnitin','useNonNative','useDeepSeek','voice-sample',
   'sop-edu','sop-research','sop-work','sop-awards','sop-story','sop-why','sop-goals',
   'ps-bg','ps-story','ps-why','ps-extra',
   'ca-prompt','ca-story','ca-msg',
@@ -1539,8 +1544,8 @@ function promptHumanize(text, wc) {
 
   const voiceSample = document.getElementById('voice-sample').value.trim();
   const voiceSection = voiceSample ? `
-VOICE CALIBRATION (critical for GPTZero bypass):
-The writer's natural voice is shown below. Analyze their sentence rhythm, word choices, how they begin and end thoughts, their level of formality. When rewriting AI-tell sentences (especially summary sentences, transition sentences, and paragraph closings), mirror this voice closely — not the content, just the style and rhythm.
+VOICE CALIBRATION:
+The writer's natural voice is shown below. When rewriting summary sentences, transition sentences, and paragraph closings, mirror this voice — not the content, just the style and rhythm.
 
 Writer's natural voice sample:
 """
@@ -1548,38 +1553,60 @@ ${voiceSample}
 """
 ` : '';
 
+  const useNonNative = document.getElementById('useNonNative').checked;
+  const nonNativeSection = useNonNative ? `
+NON-NATIVE WRITER MODE — THIS IS THE MOST IMPORTANT SECTION:
+This essay is by a Chinese international student. GPTZero is trained on native English text; non-native patterns confuse its classifier. Rewrite to authentically reflect how a high-achieving Chinese student writes in English. Do NOT "fix" these patterns — they are intentional:
 
-  return `You are a professional writing editor. Your job is to remove every trace of AI-generated writing from this text.
+VOCABULARY: Use B2-level academic English only. No idioms, no native-sounding phrases, no sophisticated lexical choices. Simple words preferred over precise ones.
+  - Wrong: "The results yielded a counterintuitive finding" → Right: "The result surprised me"
+  - Wrong: "This crystallized my conviction" → Right: "This made me more sure"
 
+ARTICLES: Occasionally omit or misuse "a/an/the" naturally, as Chinese speakers do:
+  - "I learned from book" / "in real life" / "with help of teacher" / "the psychology" (wrong article)
 
+SENTENCE STRUCTURE: Short S-V-O sentences. Avoid complex relative clauses and nested subordination.
+  - Split long sentences into two simpler ones.
+
+TRANSITIONS: Direct and functional, not literary:
+  - Acceptable: "Later," / "After that," / "This showed me that" / "I also"
+  - Forbidden: "This revelation catalyzed" / "Building upon" / "Through this lens"
+
+PARAGRAPH ENDINGS: Stop immediately when the point is made. No wrap-up meta-reflection sentence ("This experience showed me the power of X"). Just stop.
+
+REMOVE ALL: rhetorical contrast frames ("not only X but also Y"), rule-of-three structures, sophisticated parallelism, irony or self-aware narrator voice.
+` : '';
+
+  return `You are a professional writing editor. Your job is to remove AI-generated writing patterns from this text.
+
+${nonNativeSection}
 PATTERNS TO FIND AND FIX:
 
 Vocabulary:
-- Remove any banned words still present: delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, navigate, landscape, realm, testament, showcased, honed, spearheaded, garnered, diverse perspectives${extraBanned}
+- Remove any banned words: delve, leverage, robust, pivotal, nuanced, tapestry, foster, moreover, furthermore, multifaceted, transformative, invaluable, navigate, landscape, realm, testament, showcased, honed, spearheaded, garnered, diverse perspectives${extraBanned}
 
 Structure:
-- Em-dashes (—): replace each with a period, comma, colon, or parentheses
-- Three consecutive similar-length sentences: break the pattern, vary lengths
-- Rule of three lists: restructure so it's not exactly three parallel items
-- Signposting words (firstly, secondly, in conclusion, to summarize, additionally): remove or rephrase
+- Em-dashes (—): replace with period, comma, or colon
+- Three consecutive similar-length sentences: vary lengths
+- Signposting (firstly, secondly, in conclusion, to summarize, additionally): remove or rephrase
 - Persuasive framing ("This demonstrates that", "This shows that", "This highlights"): cut or integrate naturally
 - Excessive parallel structure: if three clauses start identically, vary at least one
 
 Voice:
 - Hollow adjective claims ("incredible experience", "remarkable opportunity"): replace with the specific thing
 - Filler hedges (somewhat, rather, quite, very, truly, really): cut most of them
-- Generic transitions ("Through this experience", "Building on this", "This journey"): cut or rephrase naturally
-- Future-trite endings ("I look forward to contributing"): replace with something specific
+- Generic transitions ("Through this experience", "Building on this", "This journey"): cut or rephrase
+- Trite endings ("I look forward to contributing"): replace with something specific
 ${extraTells}
 ${voiceSection}
 PROCESS:
-1. First pass: fix all structural/vocabulary patterns above
-2. If voice sample provided: rewrite every summary sentence, transition sentence, and paragraph closing to match the writer's voice
-3. If personal details provided: replace generic AI conclusion sentences with specific details from the list
-4. FINAL CHECK: ask yourself "what 3 sentences would GPTZero flag as AI?" Rewrite those specifically.
-5. Do not change any facts, numbers, or stories. Keep the same length (~${wc} words).
+1. Apply NON-NATIVE MODE rules above first (if enabled) — these override everything else
+2. Fix vocabulary and structural AI patterns
+3. If voice sample provided: rewrite summary sentences and paragraph closings to match that voice
+4. FINAL CHECK: identify the 3 sentences that sound most AI-written. Rewrite each one.
+5. Keep all facts, numbers, and stories. Keep same length (~${wc} words).
 
-Output ONLY the revised text. No commentary, no explanation, no headers.
+Output ONLY the revised text. No commentary, no explanation.
 
 TEXT:
 ${text}`;
