@@ -1375,6 +1375,27 @@ function renderGZEditor(area, text) {
     `</div>`;
 }
 
+// Find best matching sentence from reference essays (pure JS, no AI)
+function findRefMatch(target, essays) {
+  if (!essays) return null;
+  const stopWords = new Set(['the','a','an','is','was','are','were','to','of','in','and','or','that','it','for','with','this','my','i','me','we','they','you','he','she','on','at','be','as','have','had','not','from','by','but','so','do','did','his','her','its','our','their','been','has','will','can','all','one','more','also','when','which','who','what','how','than','then','them','into','out','up','about','after','before','just','some','any','each','would','could','should','very','much','many','most','such','there','here']);
+  const words = s => s.toLowerCase().split(/\W+/).filter(w => w.length > 3 && !stopWords.has(w));
+  const targetWords = new Set(words(target));
+  const refs = essays.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 20 && s.length < 300);
+  let best = null, bestScore = 0;
+  for (const ref of refs) {
+    const refWords = words(ref);
+    const overlap = refWords.filter(w => targetWords.has(w)).length;
+    const union = new Set([...targetWords, ...refWords]).size;
+    const jaccard = union > 0 ? overlap / union : 0;
+    // also reward similar length
+    const lenRatio = Math.min(ref.length, target.length) / Math.max(ref.length, target.length);
+    const score = jaccard * 0.75 + lenRatio * 0.25;
+    if (score > bestScore) { best = ref; bestScore = score; }
+  }
+  return bestScore >= 0.18 ? { sentence: best, score: bestScore } : null;
+}
+
 function editGZSentence(el) {
   if (el.querySelector('textarea')) return; // already editing
   const originalHtml = el.dataset.original;
@@ -1387,37 +1408,57 @@ function editGZSentence(el) {
   ta.value = plainText;
   ta.rows = Math.max(2, Math.ceil(plainText.length / 80));
 
-  // Suggestion area (async Claude hint)
-  const hint = document.createElement('div');
-  hint.style.cssText = 'font-size:0.76rem;color:#6366f1;margin-top:4px;padding:4px 6px;background:#f0f0ff;border-radius:4px;cursor:pointer;line-height:1.5;';
-  hint.textContent = '💡 Claude 建议加载中...';
-  hint.title = '点击使用此建议（仍需自己修改以降低AI率）';
-
   el.style.background = '#eff6ff';
   el.style.borderBottom = '2px solid #3b82f6';
   el.style.cursor = 'default';
   el.textContent = '';
   el.appendChild(ta);
-  el.appendChild(hint);
   ta.focus();
   ta.select();
-
   ta.addEventListener('blur', () => saveGZSentence(el, ta, plainText));
   ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ta.blur(); } });
 
-  // Async: fetch Claude suggestion without blocking the editor
   const wl = getWordlist();
-  const bannedStr = wl.banned.length ? `Banned words to avoid: ${wl.banned.join(', ')}. ` : '';
-  const essayRef = wl.essays ? `\nReference writing style:\n"""\n${wl.essays.slice(0, 1500)}\n"""` : '';
-  const suggPrompt = `Rewrite this sentence to sound less AI-generated. Keep the same meaning and facts. Use simpler, more direct phrasing. ${bannedStr}Output ONLY the rewritten sentence, nothing else.${essayRef}\n\nSentence: ${plainText}`;
-  callClaude('You rewrite sentences to sound more human and natural.', suggPrompt, () => {})
-    .then(suggestion => {
-      const s = suggestion.trim().replace(/^["'"]|["'"]$/g, '');
-      if (!s || s === plainText) { hint.textContent = '💡 无建议（原句已较好）'; return; }
-      hint.innerHTML = `💡 <strong>Claude 建议：</strong>${esc(s)} <span style="color:#94a3b8;font-size:0.7rem;">（点击复制到编辑框，再自己修改）</span>`;
-      hint.onclick = () => { ta.value = s; ta.focus(); };
+
+  // Step 1: search reference essays for a matching sentence (zero AI, instant)
+  const refMatch = findRefMatch(plainText, wl.essays);
+  if (refMatch) {
+    const refBox = document.createElement('div');
+    refBox.style.cssText = 'font-size:0.76rem;margin-top:6px;padding:6px 8px;background:#f0fdf4;border:1px solid #10b981;border-radius:4px;line-height:1.6;';
+    refBox.innerHTML =
+      `<div style="color:#065f46;font-weight:600;margin-bottom:3px;">📚 参考文章最匹配句（相似度 ${Math.round(refMatch.score*100)}%，点击使用）</div>` +
+      `<div style="color:#064e3b;cursor:pointer;" onclick="this.closest('span').querySelector('textarea').value='${refMatch.sentence.replace(/'/g,"&#39;").replace(/\n/g,' ')}';this.closest('span').querySelector('textarea').focus();">${esc(refMatch.sentence)}</div>` +
+      `<div style="color:#94a3b8;font-size:0.7rem;margin-top:2px;">点击填入编辑框，再按需微调措辞</div>`;
+    el.appendChild(refBox);
+
+    // Step 2: also async load Claude suggestion as fallback
+    const claudeBox = document.createElement('div');
+    claudeBox.style.cssText = 'font-size:0.76rem;margin-top:4px;padding:4px 6px;background:#f8f8ff;border-radius:4px;color:#6366f1;line-height:1.5;';
+    claudeBox.textContent = '💡 Claude 备选方案加载中...';
+    el.appendChild(claudeBox);
+    fetchClaudeSuggestion(plainText, wl, ta, claudeBox);
+  } else {
+    // No good reference match — go straight to Claude suggestion
+    const claudeBox = document.createElement('div');
+    claudeBox.style.cssText = 'font-size:0.76rem;margin-top:6px;padding:6px 8px;background:#f0f0ff;border:1px solid #a5b4fc;border-radius:4px;color:#6366f1;line-height:1.5;';
+    claudeBox.textContent = '💡 参考文章无匹配句，Claude 建议加载中...';
+    el.appendChild(claudeBox);
+    fetchClaudeSuggestion(plainText, wl, ta, claudeBox);
+  }
+}
+
+function fetchClaudeSuggestion(plainText, wl, ta, box) {
+  const bannedStr = wl.banned.length ? `Avoid these words: ${wl.banned.join(', ')}. ` : '';
+  const essayRef = wl.essays ? `\nMimic this writer's voice and vocabulary level:\n"""\n${wl.essays.slice(0, 1200)}\n"""` : '';
+  const prompt = `Rewrite this sentence to sound more natural and less AI-generated. Keep all facts and meaning. Use direct, simple phrasing — avoid formal academic constructions. ${bannedStr}Output ONLY the rewritten sentence.${essayRef}\n\nSentence: ${plainText}`;
+  callClaude('You rewrite sentences to sound human. Output only the rewritten sentence.', prompt, () => {})
+    .then(s => {
+      s = s.trim().replace(/^["'""]|["'""]$/g, '');
+      if (!s || s === plainText) { box.textContent = ''; return; }
+      box.innerHTML = `<strong>💡 Claude 备选：</strong><span style="cursor:pointer;" onclick="this.closest('span[class]') || this.closest('div').previousElementSibling || document.activeElement">${esc(s)}</span> <span style="color:#94a3b8;font-size:0.7rem;">（点击填入）</span>`;
+      box.onclick = () => { ta.value = s; ta.focus(); };
     })
-    .catch(() => { hint.textContent = ''; });
+    .catch(() => { box.textContent = ''; });
 }
 
 function saveGZSentence(el, ta, original) {
