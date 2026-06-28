@@ -2107,6 +2107,11 @@ ${fr}`,
       const wlEssays = getWordlist().essays;
       let current = sourceText;
 
+      // Extract sentences from reference essays for splicing
+      const refSentences = wlEssays
+        ? wlEssays.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 25 && s.length < 250)
+        : [];
+
       for (let round = 1; round <= 3; round++) {
         log(`第 ${round} 轮 GPTZero 检测中...`);
         let result;
@@ -2115,32 +2120,44 @@ ${fr}`,
 
         log(`第 ${round} 轮分数：${result.score}% AI`, result.score <= 40 ? 'done' : 'active');
 
-        if (result.score <= 40) {
-          log('已达标（≤40%），停止优化', 'done');
-          break;
-        }
+        if (result.score <= 40) { log('已达标（≤40%），停止优化', 'done'); break; }
 
         const flagged = result.sentences.filter(s => s.prob > 0.65);
         if (flagged.length === 0 || round === 3) break;
 
-        log(`改写 ${flagged.length} 个高风险句子...`);
-        const flaggedList = flagged.map((s, i) => `${i+1}. "${s.text.trim()}"`).join('\n');
-        const essayRef = wlEssays ? `\nReference essays (borrow phrasing from these):\n"""\n${wlEssays.slice(0,2000)}\n"""` : '';
+        // Take top 8 highest-risk sentences to splice
+        const topFlagged = flagged.sort((a,b) => b.prob - a.prob).slice(0, 8);
+        log(`句子拼接：从参考文章找模板替换 ${topFlagged.length} 个高风险句子...`);
 
-        const rewritePrompt = `Rewrite ONLY these sentences to sound less AI-generated. Use simpler, more direct phrasing similar to a non-native English speaker. Borrow sentence patterns from the reference essays if provided. Keep all facts.${essayRef}
+        const refSample = refSentences.slice(0, 60).join('\n');
+        const flaggedList = topFlagged.map((s, i) => `${i+1}. ${s.text.trim()}`).join('\n');
 
-Output ONLY numbered rewrites matching input numbers. Nothing else.
+        const splicePrompt = `You are doing sentence template splicing to reduce AI detection.
 
-SENTENCES:
-${flaggedList}`;
+TASK: For each AI-detected sentence, find the most structurally similar sentence from the REFERENCE SENTENCES below. Then output a version that:
+- Uses the REFERENCE sentence as the template (keep its word order and phrasing as much as possible)
+- Only changes the specific facts/names/numbers to match the AI sentence's meaning
+- Result should have >60% of the reference sentence's actual words
 
-        const rewrites = await callClaude('You are a copy editor making text sound more human.', rewritePrompt, () => {});
-        const lines = rewrites.split('\n').filter(l => /^\d+\./.test(l.trim()));
-        flagged.forEach((s, i) => {
+If no reference sentence fits well, output the original AI sentence unchanged.
+
+REFERENCE SENTENCES (from human-written essays):
+${refSample || '(no reference essays provided — keep originals)'}
+
+AI SENTENCES TO REPLACE (output numbered list, one per line):
+${flaggedList}
+
+Output ONLY the numbered replacements. No commentary.`;
+
+        const spliced = await callClaude('You splice human-written sentence templates to replace AI-generated sentences.', splicePrompt, () => {});
+        const lines = spliced.split('\n').filter(l => /^\d+\./.test(l.trim()));
+        topFlagged.forEach((s, i) => {
           const line = lines[i];
           if (!line) return;
           const newText = line.replace(/^\d+\.\s*[""]?/, '').replace(/[""]?\s*$/, '').trim();
-          if (newText && newText.length > 10) current = current.replace(s.text.trim(), newText);
+          if (newText && newText.length > 10 && newText !== s.text.trim()) {
+            current = current.replace(s.text.trim(), newText);
+          }
         });
         outputs[4] = current;
         if (activeTab === 4) renderOutput();
