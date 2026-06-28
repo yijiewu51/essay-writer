@@ -777,6 +777,11 @@
         <div class="stage-dot">4</div>
         <div>DeepSeek</div>
       </div>
+      <div class="stage-connector" id="conn4"></div>
+      <div class="stage" id="st5">
+        <div class="stage-dot">5</div>
+        <div>GPTZero优化</div>
+      </div>
     </div>
 
     <div class="progress-wrap">
@@ -802,6 +807,9 @@
       </div>
       <div class="tab" id="tab3" onclick="switchTab(3)">
         DeepSeek优化 <span class="tab-badge pending" id="badge3">4</span>
+      </div>
+      <div class="tab" id="tab4" onclick="switchTab(4)">
+        GPTZero优化 <span class="tab-badge pending" id="badge4">5</span>
       </div>
     </div>
 
@@ -840,7 +848,7 @@
 
 <script>
 // ===== State =====
-const outputs = ['', '', '', ''];
+const outputs = ['', '', '', '', ''];
 let activeTab = 0;
 let generating = false;
 let activeStage = -1;
@@ -1080,8 +1088,9 @@ function restoreEssay(id) {
   outputs[1] = item.outputs[1] || '';
   outputs[2] = item.outputs[2] || '';
   outputs[3] = item.outputs[3] || '';
-  [0,1,2,3].forEach(i => setBadge(i, !!outputs[i]));
-  switchTab(item.outputs[3] ? 3 : item.outputs[2] ? 2 : item.outputs[1] ? 1 : 0);
+  outputs[4] = item.outputs[4] || '';
+  [0,1,2,3,4].forEach(i => setBadge(i, !!outputs[i]));
+  switchTab(item.outputs[4] ? 4 : item.outputs[3] ? 3 : item.outputs[2] ? 2 : item.outputs[1] ? 1 : 0);
   document.getElementById('outFooter').style.display = 'flex';
   toggleHistory();
 }
@@ -1103,7 +1112,7 @@ function renderHistory() {
   }
 
   list.innerHTML = all.map(item => {
-    const preview = (item.outputs[3] || item.outputs[2] || item.outputs[1] || item.outputs[0] || '').trim().slice(0, 100);
+    const preview = (item.outputs[4] || item.outputs[3] || item.outputs[2] || item.outputs[1] || item.outputs[0] || '').trim().slice(0, 100);
     return `<div class="history-item" onclick="restoreEssay(${item.id})">
       <div class="history-item-top">
         <span class="history-item-school">${esc(item.school || '未填写学校')}</span>
@@ -1199,7 +1208,7 @@ function switchType() {
 // ===== Tabs =====
 function switchTab(i) {
   activeTab = i;
-  [0,1,2,3].forEach(j => {
+  [0,1,2,3,4].forEach(j => {
     document.getElementById('tab' + j).classList.toggle('active', j === i);
   });
   renderOutput();
@@ -1419,11 +1428,11 @@ function setStage(n, state) {
   if (state === 'active') el.classList.add('active');
   if (state === 'done') el.classList.add('done');
 
-  if (state === 'done' && n < 4) {
+  if (state === 'done' && n < 5) {
     document.getElementById('conn' + n).classList.add('done');
   }
 
-  const pct = { 1: { active:5, done:25 }, 2: { active:30, done:50 }, 3: { active:55, done:75 }, 4: { active:80, done:100 } };
+  const pct = { 1: { active:5, done:20 }, 2: { active:25, done:40 }, 3: { active:45, done:60 }, 4: { active:65, done:80 }, 5: { active:85, done:100 } };
   if (pct[n]?.[state] !== undefined) {
     document.getElementById('pFill').style.width = pct[n][state] + '%';
   }
@@ -1938,7 +1947,7 @@ async function generate() {
   const ctx = buildContext();
 
   // Reset UI
-  outputs[0] = outputs[1] = outputs[2] = outputs[3] = '';
+  outputs[0] = outputs[1] = outputs[2] = outputs[3] = outputs[4] = '';
   generating = true;
   activeStage = 0;
   document.getElementById('genBtn').disabled = true;
@@ -1947,9 +1956,9 @@ async function generate() {
   document.getElementById('logWrap').style.display = 'none';
   document.getElementById('outFooter').style.display = 'none';
   document.getElementById('pFill').style.width = '0%';
-  [1,2,3,4].forEach(n => setStage(n, 'idle'));
-  [0,1,2,3].forEach(n => setBadge(n, false));
-  ['conn1','conn2','conn3'].forEach(id => document.getElementById(id).classList.remove('done'));
+  [1,2,3,4,5].forEach(n => setStage(n, 'idle'));
+  [0,1,2,3,4].forEach(n => setBadge(n, false));
+  ['conn1','conn2','conn3','conn4'].forEach(id => document.getElementById(id).classList.remove('done'));
   switchTab(0);
 
   const sysWrite = 'You are an expert college admissions writer with 20+ years of experience helping students get into top universities worldwide. You write authentic, specific, compelling application documents.';
@@ -2085,8 +2094,72 @@ ${fr}`,
       }
     }
 
-    const bestTab = outputs[3] ? 3 : outputs[2] ? 2 : 1;
-    log('全部完成！最终文书在「' + ['初稿','去AI优化','Turnitin优化','DeepSeek优化'][bestTab] + '」标签页', 'done');
+    // === Stage 5: GPTZero auto-optimize (runs automatically if key set) ===
+    const gzKey = getGzKey();
+    if (gzKey) {
+      setStage(5, 'active');
+      const sourceText = outputs[3] || outputs[2] || outputs[1];
+      outputs[4] = sourceText;
+      activeStage = 4;
+      switchTab(4);
+      log('GPTZero 自动优化循环开始（最多3轮）...');
+
+      const wlEssays = getWordlist().essays;
+      let current = sourceText;
+
+      for (let round = 1; round <= 3; round++) {
+        log(`第 ${round} 轮 GPTZero 检测中...`);
+        let result;
+        try { result = await callGPTZero(current); }
+        catch (e) { log('GPTZero 调用失败：' + e.message, 'err'); break; }
+
+        log(`第 ${round} 轮分数：${result.score}% AI`, result.score <= 40 ? 'done' : 'active');
+
+        if (result.score <= 40) {
+          log('已达标（≤40%），停止优化', 'done');
+          break;
+        }
+
+        const flagged = result.sentences.filter(s => s.prob > 0.65);
+        if (flagged.length === 0 || round === 3) break;
+
+        log(`改写 ${flagged.length} 个高风险句子...`);
+        const flaggedList = flagged.map((s, i) => `${i+1}. "${s.text.trim()}"`).join('\n');
+        const essayRef = wlEssays ? `\nReference essays (borrow phrasing from these):\n"""\n${wlEssays.slice(0,2000)}\n"""` : '';
+
+        const rewritePrompt = `Rewrite ONLY these sentences to sound less AI-generated. Use simpler, more direct phrasing similar to a non-native English speaker. Borrow sentence patterns from the reference essays if provided. Keep all facts.${essayRef}
+
+Output ONLY numbered rewrites matching input numbers. Nothing else.
+
+SENTENCES:
+${flaggedList}`;
+
+        const rewrites = await callClaude('You are a copy editor making text sound more human.', rewritePrompt, () => {});
+        const lines = rewrites.split('\n').filter(l => /^\d+\./.test(l.trim()));
+        flagged.forEach((s, i) => {
+          const line = lines[i];
+          if (!line) return;
+          const newText = line.replace(/^\d+\.\s*[""]?/, '').replace(/[""]?\s*$/, '').trim();
+          if (newText && newText.length > 10) current = current.replace(s.text.trim(), newText);
+        });
+        outputs[4] = current;
+        if (activeTab === 4) renderOutput();
+      }
+
+      // Final score
+      try {
+        const final = await callGPTZero(current);
+        log(`最终 GPTZero 分数：${final.score}% AI`, final.score <= 40 ? 'done' : 'err');
+        outputs[4] = current;
+      } catch {}
+
+      setStage(5, 'done');
+      setBadge(4, true);
+      switchTab(4);
+    }
+
+    const bestTab = outputs[4] ? 4 : outputs[3] ? 3 : outputs[2] ? 2 : 1;
+    log('全部完成！最终文书在「' + ['初稿','去AI优化','Turnitin优化','DeepSeek优化','GPTZero优化'][bestTab] + '」标签页', 'done');
     saveToHistory(type, school, outputs);
 
   } catch (err) {
