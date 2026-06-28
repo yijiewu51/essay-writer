@@ -2365,8 +2365,11 @@ ${fr}`,
     const gzKey = getGzKey();
     if (gzKey) {
       setStage(5, 'active');
-      const sourceText = outputs[3] || outputs[2] || outputs[1];
+      // Draft mode: use Stage 2 output (pre-Turnitin) — translation chain destroys human fingerprint
+      // Standard mode: use best available (DeepSeek → Turnitin → humanized)
+      const sourceText = isDraftMode ? outputs[1] : (outputs[3] || outputs[2] || outputs[1]);
       outputs[4] = sourceText;
+      if (isDraftMode) log('草稿模式：GPTZero 使用翻译前的文稿（保留你的写作指纹）');
       gzFlaggedSentences = [];
       activeStage = 4;
       switchTab(4);
