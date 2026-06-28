@@ -243,6 +243,38 @@
     }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
+    /* GPTZero interactive editor */
+    .ai-sentence {
+      border-radius: 3px;
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+    }
+    .ai-sentence:hover { filter: brightness(0.92); }
+    .ai-sent-edit {
+      display: block;
+      width: 100%;
+      min-height: 60px;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 0.93rem;
+      line-height: 1.75;
+      border: 2px solid #3b82f6;
+      border-radius: 4px;
+      padding: 4px 8px;
+      background: #eff6ff;
+      resize: vertical;
+      box-sizing: border-box;
+      margin: 2px 0;
+    }
+    .gz-score-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
     .out-footer {
       display: none;
       align-items: center;
@@ -852,6 +884,7 @@ const outputs = ['', '', '', '', ''];
 let activeTab = 0;
 let generating = false;
 let activeStage = -1;
+let gzFlaggedSentences = []; // [{text, prob}] from last GPTZero scan
 
 // ===== API Key =====
 function toggleSettings() {
@@ -1228,11 +1261,96 @@ function renderOutput() {
   }
 
   const isStreaming = generating && activeTab === activeStage;
-  area.innerHTML = `<div class="out-text">${esc(text)}${isStreaming ? '<span class="cursor"></span>' : ''}</div>`;
+
+  if (activeTab === 4 && gzFlaggedSentences.length > 0 && !isStreaming) {
+    renderGZEditor(area, text);
+  } else {
+    area.innerHTML = `<div class="out-text">${esc(text)}${isStreaming ? '<span class="cursor"></span>' : ''}</div>`;
+  }
 
   const words = text.trim().split(/\s+/).filter(Boolean).length;
   document.getElementById('wc').textContent = words + ' 词';
   footer.style.display = 'flex';
+}
+
+function renderGZEditor(area, text) {
+  // Escape text first, then wrap flagged sentences in clickable spans
+  let html = esc(text);
+  const sorted = [...gzFlaggedSentences].sort((a, b) => b.text.length - a.text.length);
+  for (const s of sorted) {
+    const escapedSent = esc(s.text.trim());
+    if (!html.includes(escapedSent)) continue;
+    const pct = Math.round(s.prob * 100);
+    const bg = pct >= 90 ? '#fee2e2' : pct >= 75 ? '#ffedd5' : '#fef9c3';
+    const border = pct >= 90 ? '#dc2626' : pct >= 75 ? '#ea580c' : '#ca8a04';
+    const span = `<span class="ai-sentence" style="background:${bg};border-bottom:2px solid ${border};" ` +
+      `data-original="${escapedSent.replace(/"/g,'&quot;')}" data-prob="${pct}" ` +
+      `onclick="editGZSentence(this)" title="点击编辑（${pct}% AI）">${escapedSent}</span>`;
+    html = html.replace(escapedSent, span);
+  }
+  area.innerHTML = `<div class="out-text" style="white-space:pre-wrap;">${html}</div>` +
+    `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">` +
+    `<button class="copy-btn" style="background:#6366f1;color:white;" onclick="retestGPTZero()" id="retestBtn">重测 GPTZero</button>` +
+    `<span style="font-size:0.78rem;color:#64748b;">🔴点击红色句子编辑 · 编辑完点「重测 GPTZero」</span>` +
+    `</div>`;
+}
+
+function editGZSentence(el) {
+  if (el.querySelector('textarea')) return; // already editing
+  const originalHtml = el.dataset.original;
+  // Decode HTML entities to get plain text
+  const tmp = document.createElement('textarea');
+  tmp.innerHTML = originalHtml;
+  const plainText = tmp.value;
+
+  const ta = document.createElement('textarea');
+  ta.className = 'ai-sent-edit';
+  ta.value = plainText;
+  ta.rows = Math.max(2, Math.ceil(plainText.length / 80));
+
+  el.style.background = '#eff6ff';
+  el.style.borderBottom = '2px solid #3b82f6';
+  el.style.cursor = 'default';
+  el.textContent = '';
+  el.appendChild(ta);
+  ta.focus();
+  ta.select();
+
+  ta.addEventListener('blur', () => saveGZSentence(el, ta, plainText));
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ta.blur(); } });
+}
+
+function saveGZSentence(el, ta, original) {
+  const newText = ta.value.trim();
+  if (newText && newText !== original) {
+    outputs[4] = outputs[4].replace(original, newText);
+    // Remove from flagged list since it's been manually edited
+    gzFlaggedSentences = gzFlaggedSentences.filter(s => s.text.trim() !== original);
+  }
+  renderOutput();
+}
+
+async function retestGPTZero() {
+  const btn = document.getElementById('retestBtn');
+  if (!btn) return;
+  const gzKey = getGzKey();
+  if (!gzKey) { alert('请先在 API Key 设置中填写 GPTZero Key'); return; }
+  btn.disabled = true;
+  btn.textContent = '检测中...';
+  try {
+    const result = await callGPTZero(outputs[4]);
+    gzFlaggedSentences = result.sentences.filter(s => s.prob > 0.65);
+    const score = result.score;
+    const color = score <= 20 ? '#10b981' : score <= 50 ? '#f59e0b' : '#dc2626';
+    btn.textContent = `重测完成：${score}% AI`;
+    btn.style.background = color;
+    renderOutput();
+    setTimeout(() => { if (btn) { btn.textContent = '重测 GPTZero'; btn.style.background = '#6366f1'; btn.disabled = false; } }, 3000);
+  } catch (e) {
+    alert('GPTZero 失败：' + e.message);
+    btn.disabled = false;
+    btn.textContent = '重测 GPTZero';
+  }
 }
 
 function esc(s) {
@@ -2094,122 +2212,32 @@ ${fr}`,
       }
     }
 
-    // === Stage 5: GPTZero auto-optimize (runs automatically if key set) ===
+    // === Stage 5: GPTZero scan → interactive editor ===
     const gzKey = getGzKey();
     if (gzKey) {
       setStage(5, 'active');
       const sourceText = outputs[3] || outputs[2] || outputs[1];
       outputs[4] = sourceText;
+      gzFlaggedSentences = [];
       activeStage = 4;
       switchTab(4);
-      log('GPTZero 自动优化循环开始（最多3轮）...');
+      log('GPTZero 检测中...');
 
-      const wlEssays = getWordlist().essays;
-      let current = sourceText;
-
-      // Extract 4-6 word phrases from reference essays (short anchors, not full sentences)
-      function extractRefPhrases(essays) {
-        if (!essays) return [];
-        const sentences = essays.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 20);
-        const phrases = [];
-        const stopWords = new Set(['the','a','an','is','was','are','were','to','of','in','and','or','that','it','for','with','this','my','i','me','we','they','you','he','she','on','at','be','as','have','had','not','from','by','but']);
-        for (const sent of sentences) {
-          const words = sent.split(/\s+/);
-          for (let start = 0; start < words.length - 3; start++) {
-            const len = 4 + (start % 2); // alternating 4 and 5 words
-            const chunk = words.slice(start, start + len);
-            // Skip if starts/ends with stop word or has odd punctuation mid-phrase
-            if (stopWords.has(chunk[0].toLowerCase()) || /[,;:]$/.test(chunk[chunk.length-2] || '')) continue;
-            const phrase = chunk.join(' ').replace(/[,;:]+$/, '');
-            if (phrase.length > 12 && /^[A-Za-z]/.test(phrase)) phrases.push(phrase);
-          }
-        }
-        // Deduplicate
-        return [...new Set(phrases)];
-      }
-
-      const refPhrases = extractRefPhrases(wlEssays);
-
-      for (let round = 1; round <= 3; round++) {
-        log(`第 ${round} 轮 GPTZero 检测中...`);
-        let result;
-        try { result = await callGPTZero(current); }
-        catch (e) { log('GPTZero 调用失败：' + e.message, 'err'); break; }
-
-        log(`第 ${round} 轮分数：${result.score}% AI`, result.score <= 40 ? 'done' : 'active');
-
-        if (result.score <= 40) { log('已达标（≤40%），停止优化', 'done'); break; }
-
-        const flagged = result.sentences.filter(s => s.prob > 0.65);
-        if (flagged.length === 0 || round === 3) break;
-
-        const topFlagged = flagged.sort((a,b) => b.prob - a.prob).slice(0, 6);
-        log(`短语锚点注入：改写 ${topFlagged.length} 个高风险句子，嵌入参考文章短语...`);
-
-        // Pick diverse phrases for this round (shuffle + slice)
-        const shuffled = refPhrases.sort(() => Math.random() - 0.5);
-        const phrasePool = shuffled.slice(0, Math.min(40, shuffled.length));
-
-        const flaggedList = topFlagged.map((s, i) => `${i+1}. ${s.text.trim()}`).join('\n');
-        const phraseList = phrasePool.slice(0, 20).map(p => `"${p}"`).join('\n');
-
-        const anchorPrompt = `You are rewriting AI-detected sentences to sound more natural and human.
-
-For EACH sentence below, rewrite it by:
-1. Keeping the exact same meaning and information
-2. Naturally incorporating AT LEAST ONE of the EXACT phrase options listed (use the phrase verbatim, word-for-word)
-3. Varying sentence structure away from the original pattern
-4. Keeping similar length (±20%)
-5. Maintaining essay flow — do NOT add new content or delete key facts
-
-PHRASE OPTIONS (copy one verbatim into each rewrite):
-${phraseList}
-
-SENTENCES TO REWRITE:
-${flaggedList}
-
-Output ONLY the numbered rewrites. No commentary. Format: "1. [rewritten sentence]"`;
-
-        const rewritten = await callClaude('You rewrite sentences to sound human by anchoring to real human phrases.', anchorPrompt, () => {});
-        const lines = rewritten.split('\n').filter(l => /^\d+\./.test(l.trim()));
-        let replaced = 0;
-        topFlagged.forEach((s, i) => {
-          const line = lines[i];
-          if (!line) return;
-          const newText = line.replace(/^\d+\.\s*[""]?/, '').replace(/[""]?\s*$/, '').trim();
-          if (newText && newText.length > 10 && newText !== s.text.trim()) {
-            current = current.replace(s.text.trim(), newText);
-            replaced++;
-          }
-        });
-        log(`改写 ${replaced} 句完成`);
-        outputs[4] = current;
-        if (activeTab === 4) renderOutput();
-      }
-
-      // Final score + manual edit guide if still high
       try {
-        const final = await callGPTZero(current);
-        log(`最终 GPTZero 分数：${final.score}% AI`, final.score <= 40 ? 'done' : 'err');
-        outputs[4] = current;
-        if (final.score > 40) {
-          const topManual = final.sentences
-            .filter(s => s.prob > 0.65)
-            .sort((a,b) => b.prob - a.prob)
-            .slice(0, 6);
-          if (topManual.length) {
-            log('─── 手动编辑指南（改这几句可以大幅降分）───', 'active');
-            topManual.forEach((s, i) => {
-              log(`${i+1}. [${Math.round(s.prob*100)}% AI] ${s.text.trim().slice(0, 80)}...`, 'err');
-            });
-            log('建议：改写上面标红句子的句式/词汇，不改意思，改完后点「定位AI句子」重测', 'active');
-          }
-        }
-      } catch {}
+        const result = await callGPTZero(sourceText);
+        gzFlaggedSentences = result.sentences.filter(s => s.prob > 0.65);
+        const score = result.score;
+        const scoreColor = score <= 20 ? 'done' : 'active';
+        log(`GPTZero 分数：${score}% AI — ${gzFlaggedSentences.length} 句标红，点击红色句子直接编辑`, scoreColor);
+        renderOutput();
+      } catch (e) {
+        log('GPTZero 检测失败：' + e.message, 'err');
+        gzFlaggedSentences = [];
+        renderOutput();
+      }
 
       setStage(5, 'done');
       setBadge(4, true);
-      switchTab(4);
     }
 
     const bestTab = outputs[4] ? 4 : outputs[3] ? 3 : outputs[2] ? 2 : 1;
