@@ -403,9 +403,18 @@
     .wordlist-inner { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
     @media (max-width: 900px) { .wordlist-inner { grid-template-columns: 1fr; } }
     .wl-essays { max-width: 1400px; margin: 14px auto 0; }
-    .wl-essays label { color: #f59e0b; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 6px; display: block; }
-    .wl-essays textarea { width: 100%; box-sizing: border-box; background: #1e293b; border: 1px solid #f59e0b44; color: #e2e8f0; font-size: 0.82rem; border-radius: 6px; padding: 8px; }
-    .wl-essays textarea::placeholder { color: #475569; }
+    .wl-essays > .wl-essays-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .wl-essays label { color: #f59e0b; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 0; display: block; }
+    .essay-card { background: #1e293b; border: 1px solid #f59e0b33; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+    .essay-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .essay-card-title { flex: 1; background: transparent; border: none; border-bottom: 1px solid #475569; color: #f59e0b; font-size: 0.82rem; font-weight: 600; padding: 2px 4px; outline: none; min-width: 0; }
+    .essay-card-title::placeholder { color: #475569; font-weight: 400; }
+    .essay-card-delete { background: none; border: none; color: #64748b; cursor: pointer; font-size: 0.82rem; padding: 2px 6px; line-height: 1; transition: color 0.15s; }
+    .essay-card-delete:hover { color: #ef4444; }
+    .essay-card textarea { width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; font-size: 0.8rem; border-radius: 4px; padding: 6px 8px; }
+    .essay-card textarea::placeholder { color: #475569; }
+    .add-essay-btn { background: #f59e0b22; border: 1px solid #f59e0b44; color: #f59e0b; border-radius: 6px; padding: 4px 12px; font-size: 0.78rem; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+    .add-essay-btn:hover { background: #f59e0b33; }
     .wl-col label { color: #94a3b8; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 6px; display: block; }
     .wl-col textarea { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; font-size: 0.82rem; }
     .wl-col textarea::placeholder { color: #475569; }
@@ -494,9 +503,12 @@
     </div>
   </div>
   <div class="wl-essays">
-    <label>⭐ 参考文章库（你自己写的文章 — Stage 2 会借用你的表达方式替换AI短语）</label>
-    <textarea id="wl-essays" rows="8" placeholder="把你写过的任何文章粘进来，中英文都行。越多越好。&#10;&#10;AI 会从这里学习你的句子结构、用词习惯、过渡方式，在去AI优化阶段用你的语气替换那些高频AI短语。"></textarea>
-    <div class="wl-hint" style="color:#92400e;">这是降低 Copyleaks / GPTZero 最有效的方法：用你自己的短语替换 AI 高频短语</div>
+    <div class="wl-essays-header">
+      <label>⭐ 参考文章库（Stage 2 借用你的表达风格替换 AI 短语）</label>
+      <button class="add-essay-btn" onclick="addEssayCard()">+ 添加文章</button>
+    </div>
+    <div id="essayCardList"></div>
+    <div class="wl-hint" style="color:#92400e;">每篇独立保存 — 用你自己的短语替换 AI 高频短语，降低 Copyleaks / GPTZero</div>
   </div>
 
   <div class="wl-actions">
@@ -1057,7 +1069,9 @@ function loadFormData() {
         if (data.banned?.length) document.getElementById('wl-banned').value = data.banned.join('\n');
         if (data.preferred?.length) document.getElementById('wl-preferred').value = data.preferred.join('\n');
         if (data.aitells) document.getElementById('wl-aitells').value = data.aitells;
-        if (data.essays) document.getElementById('wl-essays').value = data.essays;
+        if (data.essays && !document.querySelector('#essayCardList .essay-card')) {
+          addEssayCard('参考文章（my-config.json）', data.essays);
+        }
       }
     } catch {}
   }
@@ -1161,16 +1175,47 @@ function renderHistory() {
 // ===== Wordlist =====
 function toggleWordlist() {
   document.getElementById('wordlistPanel').classList.toggle('open');
-  // close settings if open
   document.getElementById('settingsPanel').classList.remove('open');
 }
 
+// Essay card functions
+function addEssayCard(title = '', content = '') {
+  const id = 'essay_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  const list = document.getElementById('essayCardList');
+  const div = document.createElement('div');
+  div.className = 'essay-card';
+  div.dataset.essayId = id;
+  div.innerHTML =
+    `<div class="essay-card-header">` +
+      `<input class="essay-card-title" type="text" value="${esc(title)}" placeholder="文章标题（如 Essay A — UCAS PS）">` +
+      `<button class="essay-card-delete" onclick="deleteEssayCard(this)" title="删除">✕</button>` +
+    `</div>` +
+    `<textarea class="essay-card-content" rows="5" placeholder="把文章内容粘贴进来...">${esc(content)}</textarea>`;
+  list.appendChild(div);
+  div.querySelector('.essay-card-title').addEventListener('blur', saveWordlist);
+  div.querySelector('.essay-card-content').addEventListener('blur', saveWordlist);
+}
+
+function deleteEssayCard(btn) {
+  btn.closest('.essay-card').remove();
+  saveWordlist();
+}
+
+function getEssayLibraryFromDOM() {
+  return Array.from(document.querySelectorAll('#essayCardList .essay-card')).map(card => ({
+    id: card.dataset.essayId,
+    title: card.querySelector('.essay-card-title').value,
+    content: card.querySelector('.essay-card-content').value,
+  }));
+}
+
 function saveWordlist() {
+  const essayLibrary = getEssayLibraryFromDOM();
   const data = {
     banned: document.getElementById('wl-banned').value,
     preferred: document.getElementById('wl-preferred').value,
     aitells: document.getElementById('wl-aitells').value,
-    essays: document.getElementById('wl-essays').value,
+    essayLibrary,
   };
   localStorage.setItem('wl_config', JSON.stringify(data));
   const el = document.getElementById('wlSaved');
@@ -1179,7 +1224,8 @@ function saveWordlist() {
 }
 
 function clearWordlist() {
-  ['wl-banned','wl-preferred','wl-aitells','wl-essays'].forEach(id => document.getElementById(id).value = '');
+  ['wl-banned','wl-preferred','wl-aitells'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('essayCardList').innerHTML = '';
   localStorage.removeItem('wl_config');
 }
 
@@ -1191,18 +1237,25 @@ function loadWordlist() {
     if (data.banned) document.getElementById('wl-banned').value = data.banned;
     if (data.preferred) document.getElementById('wl-preferred').value = data.preferred;
     if (data.aitells) document.getElementById('wl-aitells').value = data.aitells;
-    if (data.essays) document.getElementById('wl-essays').value = data.essays;
+    document.getElementById('essayCardList').innerHTML = '';
+    if (data.essayLibrary?.length) {
+      data.essayLibrary.forEach(e => addEssayCard(e.title || '', e.content || ''));
+    } else if (data.essays) {
+      // Migrate old single-string format
+      addEssayCard('参考文章', data.essays);
+    }
   } catch {}
 }
 
 function getWordlist() {
   const parse = id => document.getElementById(id).value
     .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  const essayLib = getEssayLibraryFromDOM();
   return {
     banned: parse('wl-banned'),
     preferred: parse('wl-preferred'),
     aitells: document.getElementById('wl-aitells').value.trim(),
-    essays: document.getElementById('wl-essays').value.trim(),
+    essays: essayLib.map(e => e.content.trim()).filter(Boolean).join('\n\n---\n\n'),
   };
 }
 
@@ -1293,11 +1346,12 @@ function renderGZEditor(area, text) {
     html = html.replace(escapedSent, span);
   }
 
-  const remaining = total > 8 ? `（共 ${total} 句 AI，已标最高风险 8 句，改完重测后继续）` : `（共 ${total} 句需修改）`;
+  const remaining = total > 8 ? `共 ${total} 句 AI，已标最高风险 8 句，改完重测后继续` : `共 ${total} 句需修改`;
   area.innerHTML = `<div class="out-text" style="white-space:pre-wrap;">${html}</div>` +
-    `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">` +
+    `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">` +
+    `<button class="copy-btn" style="background:#8b5cf6;color:white;" onclick="qualityOptimize()" id="qualBtn">Claude 质量优化</button>` +
     `<button class="copy-btn" style="background:#6366f1;color:white;" onclick="retestGPTZero()" id="retestBtn">重测 GPTZero</button>` +
-    `<span style="font-size:0.78rem;color:#64748b;">🔴点击红色句子编辑，Enter保存 · ${remaining}</span>` +
+    `<span style="font-size:0.78rem;color:#64748b;">🔴点击句子编辑，Enter保存 · ${remaining}</span>` +
     `</div>`;
 }
 
@@ -1334,6 +1388,75 @@ function saveGZSentence(el, ta, original) {
     gzFlaggedSentences = gzFlaggedSentences.filter(s => s.text.trim() !== original);
   }
   renderOutput();
+}
+
+async function qualityOptimize() {
+  const key = localStorage.getItem('ant_key');
+  if (!key) { alert('请先设置 Anthropic API Key'); return; }
+  const text = outputs[4];
+  if (!text) return;
+  const btn = document.getElementById('qualBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Claude 优化中...'; }
+
+  const wc = text.trim().split(/\s+/).length;
+  const qualPrompt = `You are a skilled editor doing a single quality pass on this admissions essay draft.
+
+Fix ONLY these issues:
+- Logical gaps between sentences or paragraphs (add connective tissue where needed)
+- Imprecise word choices that weaken the argument
+- Sentences that end too abruptly before making their point
+- Repetitive phrasing within the same paragraph
+
+DO NOT:
+- Change the overall structure or paragraph order
+- Add new examples or content
+- Alter the writer's voice, tone, or sentence length patterns
+- Make it more formal or "academic-sounding"
+- Rewrite sentences that are already good
+
+Target: ~${wc} words (±5%). Output only the improved essay, no commentary.
+
+ESSAY:
+"""
+${text}
+"""`;
+
+  try {
+    const area = document.getElementById('outArea');
+    const textDiv = area?.querySelector('.out-text');
+    let improved = '';
+    await callClaude(
+      'You are a skilled editor. Make minimal quality improvements while preserving the writer\'s voice.',
+      qualPrompt,
+      chunk => {
+        improved = chunk;
+        if (textDiv && activeTab === 4) textDiv.textContent = chunk;
+      }
+    );
+    outputs[4] = improved;
+
+    // Re-run GPTZero scan to update highlights
+    const gzKey = getGzKey();
+    if (gzKey) {
+      if (btn) btn.textContent = 'GPTZero 检测中...';
+      const result = await callGPTZero(improved);
+      gzFlaggedSentences = result.sentences.filter(s => s.prob > 0.65);
+      renderOutput();
+      if (btn) { btn.textContent = `优化完 (${result.score}% AI)`; btn.style.background = '#10b981'; }
+    } else {
+      gzFlaggedSentences = [];
+      renderOutput();
+      if (btn) { btn.textContent = '质量优化完成'; btn.style.background = '#10b981'; }
+    }
+    setTimeout(() => {
+      const b = document.getElementById('qualBtn');
+      if (b) { b.textContent = 'Claude 质量优化'; b.style.background = '#8b5cf6'; b.disabled = false; }
+    }, 3500);
+  } catch (e) {
+    alert('优化失败：' + e.message);
+    const b = document.getElementById('qualBtn');
+    if (b) { b.disabled = false; b.textContent = 'Claude 质量优化'; }
+  }
 }
 
 async function retestGPTZero() {
