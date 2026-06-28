@@ -2378,6 +2378,13 @@ ${fr}`,
       if (isDraftMode) {
         log('草稿模式：先对草稿做一轮质量优化（保留写作指纹）...');
         const wc = stageSource.trim().split(/\s+/).length;
+        const wlQ = getWordlist();
+        const bannedStr = wlQ.banned.length ? `\nBANNED WORDS (replace if present): ${wlQ.banned.join(', ')}` : '';
+        const preferredStr = wlQ.preferred.length ? `\nPREFERRED VOCABULARY (use when natural): ${wlQ.preferred.join(', ')}` : '';
+        const aitellsStr = wlQ.aitells ? `\nAI WRITING PATTERNS TO AVOID:\n${wlQ.aitells}` : '';
+        const structureStr = wlQ.structureGuide ? `\nINSTITUTION STRUCTURE GUIDE (ensure essay follows this):\n${wlQ.structureGuide}` : '';
+        const essaysStr = wlQ.essays ? `\nWRITER'S REFERENCE ESSAYS (borrow phrasing patterns and vocabulary level from these when making fixes — do not copy whole sentences):\n"""\n${wlQ.essays.slice(0, 3000)}\n"""` : '';
+
         const qualPrompt = `You are a skilled editor doing a single quality pass on this admissions essay draft.
 
 Fix ONLY these issues:
@@ -2385,6 +2392,7 @@ Fix ONLY these issues:
 - Imprecise word choices that weaken the argument
 - Sentences that end too abruptly before making their point
 - Repetitive phrasing within the same paragraph
+- Any banned words listed below — replace with natural alternatives${bannedStr}${preferredStr}${aitellsStr}${structureStr}
 
 DO NOT:
 - Change the overall structure or paragraph order
@@ -2392,7 +2400,7 @@ DO NOT:
 - Alter the writer's voice, tone, or sentence length patterns
 - Make it more formal or "academic-sounding"
 - Rewrite sentences that are already good
-
+${essaysStr}
 Target: ~${wc} words (±5%). Output only the improved essay, no commentary.
 
 ESSAY:
