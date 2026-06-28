@@ -2365,22 +2365,68 @@ ${fr}`,
     const gzKey = getGzKey();
     if (gzKey) {
       setStage(5, 'active');
-      // Draft mode: use Stage 2 output (pre-Turnitin) — translation chain destroys human fingerprint
-      // Standard mode: use best available (DeepSeek → Turnitin → humanized)
-      const sourceText = isDraftMode ? outputs[1] : (outputs[3] || outputs[2] || outputs[1]);
-      outputs[4] = sourceText;
-      if (isDraftMode) log('草稿模式：GPTZero 使用翻译前的文稿（保留你的写作指纹）');
-      gzFlaggedSentences = [];
       activeStage = 4;
       switchTab(4);
-      log('GPTZero 检测中...');
+      gzFlaggedSentences = [];
 
+      // Draft mode: start from pre-Turnitin output (preserves human fingerprint),
+      // then auto-run a quality pass (targeted fixes only, not full rewrite).
+      // Standard mode: use best available post-pipeline output.
+      let stageSource = isDraftMode ? outputs[1] : (outputs[3] || outputs[2] || outputs[1]);
+      outputs[4] = stageSource;
+
+      if (isDraftMode) {
+        log('草稿模式：先对草稿做一轮质量优化（保留写作指纹）...');
+        const wc = stageSource.trim().split(/\s+/).length;
+        const qualPrompt = `You are a skilled editor doing a single quality pass on this admissions essay draft.
+
+Fix ONLY these issues:
+- Logical gaps between sentences or paragraphs (add connective tissue where needed)
+- Imprecise word choices that weaken the argument
+- Sentences that end too abruptly before making their point
+- Repetitive phrasing within the same paragraph
+
+DO NOT:
+- Change the overall structure or paragraph order
+- Add new examples or content
+- Alter the writer's voice, tone, or sentence length patterns
+- Make it more formal or "academic-sounding"
+- Rewrite sentences that are already good
+
+Target: ~${wc} words (±5%). Output only the improved essay, no commentary.
+
+ESSAY:
+"""
+${stageSource}
+"""`;
+        try {
+          const area = document.getElementById('outArea');
+          let qualResult = '';
+          await callClaude(
+            'You are a skilled editor. Make minimal quality improvements while preserving the writer\'s voice.',
+            qualPrompt,
+            chunk => {
+              qualResult = chunk;
+              outputs[4] = chunk;
+              if (activeTab === 4 && area) {
+                const td = area.querySelector('.out-text');
+                if (td) td.textContent = chunk; else area.innerHTML = `<div class="out-text">${esc(chunk)}</div>`;
+              }
+            }
+          );
+          outputs[4] = qualResult;
+          log('质量优化完成，正在 GPTZero 检测...');
+        } catch (e) {
+          log('质量优化失败，直接用草稿检测：' + e.message, 'err');
+        }
+      }
+
+      log('GPTZero 检测中...');
       try {
-        const result = await callGPTZero(sourceText);
+        const result = await callGPTZero(outputs[4]);
         gzFlaggedSentences = result.sentences.filter(s => s.prob > 0.65);
         const score = result.score;
-        const scoreColor = score <= 20 ? 'done' : 'active';
-        log(`GPTZero 分数：${score}% AI — ${gzFlaggedSentences.length} 句标红，点击红色句子直接编辑`, scoreColor);
+        log(`GPTZero 分数：${score}% AI — ${gzFlaggedSentences.length} 句标红，点击红色句子直接编辑`, score <= 20 ? 'done' : 'active');
         renderOutput();
       } catch (e) {
         log('GPTZero 检测失败：' + e.message, 'err');
