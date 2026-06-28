@@ -1274,10 +1274,14 @@ function renderOutput() {
 }
 
 function renderGZEditor(area, text) {
-  // Escape text first, then wrap flagged sentences in clickable spans
+  const total = gzFlaggedSentences.length;
+  // Only highlight top 8 by probability — prevent overwhelming the user when all sentences are flagged
+  const top8 = [...gzFlaggedSentences].sort((a, b) => b.prob - a.prob).slice(0, 8);
+
   let html = esc(text);
-  const sorted = [...gzFlaggedSentences].sort((a, b) => b.text.length - a.text.length);
-  for (const s of sorted) {
+  // Sort by length desc to avoid partial-match replacements
+  const toHighlight = [...top8].sort((a, b) => b.text.length - a.text.length);
+  for (const s of toHighlight) {
     const escapedSent = esc(s.text.trim());
     if (!html.includes(escapedSent)) continue;
     const pct = Math.round(s.prob * 100);
@@ -1288,10 +1292,12 @@ function renderGZEditor(area, text) {
       `onclick="editGZSentence(this)" title="点击编辑（${pct}% AI）">${escapedSent}</span>`;
     html = html.replace(escapedSent, span);
   }
+
+  const remaining = total > 8 ? `（共 ${total} 句 AI，已标最高风险 8 句，改完重测后继续）` : `（共 ${total} 句需修改）`;
   area.innerHTML = `<div class="out-text" style="white-space:pre-wrap;">${html}</div>` +
     `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">` +
     `<button class="copy-btn" style="background:#6366f1;color:white;" onclick="retestGPTZero()" id="retestBtn">重测 GPTZero</button>` +
-    `<span style="font-size:0.78rem;color:#64748b;">🔴点击红色句子编辑 · 编辑完点「重测 GPTZero」</span>` +
+    `<span style="font-size:0.78rem;color:#64748b;">🔴点击红色句子编辑，Enter保存 · ${remaining}</span>` +
     `</div>`;
 }
 
