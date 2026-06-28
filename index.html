@@ -392,14 +392,18 @@
       position: fixed;
       top: 50px;
       left: 0; right: 0;
-      bottom: 0;
+      height: calc(100vh - 50px);
       background: #0f172a;
       color: #e2e8f0;
-      padding: 16px 24px 20px;
       border-bottom: 1px solid #1e293b;
       z-index: 99;
       box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-      overflow-y: auto;
+      overflow-y: scroll;
+      -webkit-overflow-scrolling: touch;
+    }
+    .wordlist-panel-inner-wrap {
+      padding: 16px 24px 40px;
+      min-height: 100%;
     }
     .wordlist-panel.open { display: block; }
     .wordlist-inner { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
@@ -487,6 +491,7 @@
 
 <!-- Wordlist Panel -->
 <div class="wordlist-panel" id="wordlistPanel">
+<div class="wordlist-panel-inner-wrap">
   <div class="wordlist-inner">
     <div class="wl-col">
       <label>禁用词（绝对不能出现）</label>
@@ -526,6 +531,7 @@
     <button class="btn-sm danger" onclick="clearWordlist()">清空</button>
     <span class="wl-saved" id="wlSaved">已保存</span>
   </div>
+</div>
 </div>
 
 <div class="main">
