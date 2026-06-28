@@ -886,6 +886,7 @@
       <span class="word-count" id="wc">0 词</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="copy-btn" style="background:#10b981;" onclick="autoOptimize()" id="autoOptBtn">🔄 GPTZero自动优化</button>
+        <button class="copy-btn" style="background:#f59e0b;" onclick="diagnosePipeline()" id="diagBtn">📊 各阶段AI率诊断</button>
         <button class="copy-btn" style="background:#6366f1;" onclick="scanAI()">🔍 定位AI句子</button>
         <button class="copy-btn" id="copyBtn" onclick="copyText()">复制全文</button>
       </div>
@@ -1643,6 +1644,48 @@ ${flaggedList}`;
     btn.disabled = false;
     btn.textContent = '🔄 GPTZero自动优化';
   }
+}
+
+// ===== Pipeline Diagnosis =====
+async function diagnosePipeline() {
+  const gzKey = getGzKey();
+  if (!gzKey) { alert('请先在 API Key 设置中填写 GPTZero Key'); return; }
+
+  const btn = document.getElementById('diagBtn');
+  btn.disabled = true;
+  btn.textContent = '诊断中...';
+
+  const labels = ['初稿（Stage 1）', '去AI优化（Stage 2）', 'Turnitin优化（Stage 3）', 'DeepSeek（Stage 4）', 'GPTZero标签页（Stage 5）'];
+  const isDraftMode = !!document.getElementById('user-draft').value.trim();
+
+  // Show log area
+  document.getElementById('logWrap').style.display = 'block';
+  log('━━━ 各阶段 GPTZero AI率诊断 ━━━', 'active');
+  if (isDraftMode) {
+    const rawDraft = document.getElementById('user-draft').value.trim();
+    if (rawDraft) {
+      log('原始草稿（textarea 原文）：检测中...');
+      try {
+        const r = await callGPTZero(rawDraft);
+        log(`原始草稿（textarea 原文）：${r.score}% AI`, r.score <= 40 ? 'done' : r.score <= 70 ? 'active' : 'err');
+      } catch (e) { log('原始草稿：检测失败 ' + e.message, 'err'); }
+    }
+  }
+
+  for (let i = 0; i < 5; i++) {
+    if (!outputs[i]) { log(`${labels[i]}：尚未生成，跳过`); continue; }
+    log(`${labels[i]}：检测中...`);
+    try {
+      const r = await callGPTZero(outputs[i]);
+      log(`${labels[i]}：${r.score}% AI`, r.score <= 40 ? 'done' : r.score <= 70 ? 'active' : 'err');
+    } catch (e) {
+      log(`${labels[i]}：检测失败 — ${e.message}`, 'err');
+    }
+  }
+
+  log('━━━ 诊断完成 ━━━', 'done');
+  btn.disabled = false;
+  btn.textContent = '📊 各阶段AI率诊断';
 }
 
 // ===== AI Sentence Scanner =====
