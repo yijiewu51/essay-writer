@@ -1365,7 +1365,7 @@ function renderGZEditor(area, text) {
     allSentences.push({ escaped, bg, border, label, prob: 0 });
   }
 
-  const top8 = [...gzFlaggedSentences].sort((a, b) => b.prob - a.prob).slice(0, 8);
+  const top8 = [...gzFlaggedSentences].sort((a, b) => b.prob - a.prob);
   const colorMapTexts = new Set(colorEntries.map(([t]) => esc(t.trim())));
   for (const s of top8) {
     const escaped = esc(s.text.trim());
