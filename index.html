@@ -2609,11 +2609,8 @@ ${fr}`,
         const result = await callGPTZero(outputs[4]);
         gzFlaggedSentences = result.sentences.filter(s => s.prob > 0.65); gzLastScore = result.score;
         const score = result.score;
-        log(`GPTZero 分数：${score}% AI — ${gzFlaggedSentences.length} 句标红，正在自动应用参考句替换...`, score <= 20 ? 'done' : 'active');
+        log(`GPTZero 分数：${score}% AI — ${gzFlaggedSentences.length} 句标红，点击红句查看参考库建议`, score <= 20 ? 'done' : 'active');
         renderOutput();
-        if (gzFlaggedSentences.length > 0) {
-          await autoApplyAll(true /* silent */);
-        }
       } catch (e) {
         log('GPTZero 检测失败：' + e.message, 'err');
         gzFlaggedSentences = [];
