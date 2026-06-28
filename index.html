@@ -2125,49 +2125,61 @@ ${fr}`,
         const flagged = result.sentences.filter(s => s.prob > 0.65);
         if (flagged.length === 0 || round === 3) break;
 
-        // Take top 8 highest-risk sentences to splice
+        // Pure JS verbatim splice — no AI involved, token sequences come directly from human essays
         const topFlagged = flagged.sort((a,b) => b.prob - a.prob).slice(0, 8);
-        log(`句子拼接：从参考文章找模板替换 ${topFlagged.length} 个高风险句子...`);
+        log(`句子拼接：从参考文章找词汇最接近的句子，verbatim 插入 ${topFlagged.length} 处...`);
 
-        const refSample = refSentences.slice(0, 60).join('\n');
-        const flaggedList = topFlagged.map((s, i) => `${i+1}. ${s.text.trim()}`).join('\n');
+        function verbatimBestMatch(target, refs) {
+          if (!refs.length) return null;
+          const stopWords = new Set(['the','a','an','is','was','are','were','to','of','in','and','or','that','it','for','with','this','my','i','me','we','they','you','he','she','on','at','be','as','have','had','not','from','by','but','so','if','do','did','his','her','its','our','their','been','has','will','can','all','one','more','also','when','which','who','what','how','than','then','them','these','those','into','out','up','about','after','before','your','we','just','some','any','each','would','could','should','very','much','many','most','such','there','here']);
+          const targetWords = target.toLowerCase().split(/\W+/).filter(w => w.length > 3 && !stopWords.has(w));
+          const targetSet = new Set(targetWords);
+          let best = null, bestScore = -Infinity;
+          for (const ref of refs) {
+            const refWords = ref.toLowerCase().split(/\W+/).filter(w => w.length > 3 && !stopWords.has(w));
+            const overlap = refWords.filter(w => targetSet.has(w)).length;
+            const union = new Set([...targetWords, ...refWords]).size;
+            const jaccard = union > 0 ? overlap / union : 0;
+            // Prefer similar length
+            const lenRatio = Math.min(ref.length, target.length) / Math.max(ref.length, target.length);
+            const score = jaccard * 0.7 + lenRatio * 0.3;
+            if (score > bestScore) { best = ref; bestScore = score; }
+          }
+          // Only use if meaningful overlap (jaccard > 0.08); otherwise keep original
+          return bestScore > 0.08 ? best : null;
+        }
 
-        const splicePrompt = `You are doing sentence template splicing to reduce AI detection.
-
-TASK: For each AI-detected sentence, find the most structurally similar sentence from the REFERENCE SENTENCES below. Then output a version that:
-- Uses the REFERENCE sentence as the template (keep its word order and phrasing as much as possible)
-- Only changes the specific facts/names/numbers to match the AI sentence's meaning
-- Result should have >60% of the reference sentence's actual words
-
-If no reference sentence fits well, output the original AI sentence unchanged.
-
-REFERENCE SENTENCES (from human-written essays):
-${refSample || '(no reference essays provided — keep originals)'}
-
-AI SENTENCES TO REPLACE (output numbered list, one per line):
-${flaggedList}
-
-Output ONLY the numbered replacements. No commentary.`;
-
-        const spliced = await callClaude('You splice human-written sentence templates to replace AI-generated sentences.', splicePrompt, () => {});
-        const lines = spliced.split('\n').filter(l => /^\d+\./.test(l.trim()));
-        topFlagged.forEach((s, i) => {
-          const line = lines[i];
-          if (!line) return;
-          const newText = line.replace(/^\d+\.\s*[""]?/, '').replace(/[""]?\s*$/, '').trim();
-          if (newText && newText.length > 10 && newText !== s.text.trim()) {
-            current = current.replace(s.text.trim(), newText);
+        let replaced = 0;
+        topFlagged.forEach(s => {
+          const match = verbatimBestMatch(s.text.trim(), refSentences);
+          if (match && match.trim() !== s.text.trim()) {
+            current = current.replace(s.text.trim(), match.trim());
+            replaced++;
           }
         });
+        log(`verbatim 替换 ${replaced} 句（其余保持原样）`);
         outputs[4] = current;
         if (activeTab === 4) renderOutput();
       }
 
-      // Final score
+      // Final score + manual edit guide if still high
       try {
         const final = await callGPTZero(current);
         log(`最终 GPTZero 分数：${final.score}% AI`, final.score <= 40 ? 'done' : 'err');
         outputs[4] = current;
+        if (final.score > 40) {
+          const topManual = final.sentences
+            .filter(s => s.prob > 0.65)
+            .sort((a,b) => b.prob - a.prob)
+            .slice(0, 6);
+          if (topManual.length) {
+            log('─── 手动编辑指南（改这几句可以大幅降分）───', 'active');
+            topManual.forEach((s, i) => {
+              log(`${i+1}. [${Math.round(s.prob*100)}% AI] ${s.text.trim().slice(0, 80)}...`, 'err');
+            });
+            log('建议：改写上面标红句子的句式/词汇，不改意思，改完后点「定位AI句子」重测', 'active');
+          }
+        }
       } catch {}
 
       setStage(5, 'done');
