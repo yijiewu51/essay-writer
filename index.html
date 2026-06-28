@@ -415,6 +415,13 @@
       <button class="btn-sm danger" onclick="clearDsKey()">清除</button>
     </div>
     <div id="dsKeyStatus"></div>
+    <div style="font-size:0.75rem; color:#94a3b8; margin-top:10px;">GPTZero API Key（自动优化循环 — 可选）</div>
+    <div class="api-row">
+      <input type="password" id="gzKeyInput" placeholder="b04b..." />
+      <button class="btn-sm" onclick="saveGzKey()">保存</button>
+      <button class="btn-sm danger" onclick="clearGzKey()">清除</button>
+    </div>
+    <div id="gzKeyStatus"></div>
   </div>
 </div>
 
@@ -809,10 +816,17 @@
 
     <div class="out-footer" id="outFooter">
       <span class="word-count" id="wc">0 词</span>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="copy-btn" style="background:#10b981;" onclick="autoOptimize()" id="autoOptBtn">🔄 GPTZero自动优化</button>
         <button class="copy-btn" style="background:#6366f1;" onclick="scanAI()">🔍 定位AI句子</button>
         <button class="copy-btn" id="copyBtn" onclick="copyText()">复制全文</button>
       </div>
+    </div>
+
+    <!-- GPTZero score panel -->
+    <div id="gzPanel" style="display:none;margin:0 18px 16px;background:#f0fdf4;border:1px solid #10b981;border-radius:8px;padding:14px;">
+      <div style="font-size:0.8rem;font-weight:600;color:#065f46;margin-bottom:8px;" id="gzScore"></div>
+      <div id="gzDetail" style="font-size:0.82rem;color:#064e3b;line-height:1.7;"></div>
     </div>
 
     <!-- AI scan results panel -->
@@ -882,6 +896,23 @@ function getDsKey() {
   return localStorage.getItem('ds_key')
     || document.getElementById('dsKeyInput').value.trim()
     || document.getElementById('dsKeyInput2').value.trim();
+}
+
+function saveGzKey() {
+  const k = document.getElementById('gzKeyInput').value.trim();
+  if (!k) return;
+  localStorage.setItem('gz_key', k);
+  const el = document.getElementById('gzKeyStatus');
+  el.textContent = '已保存'; el.style.color = '#10b981';
+}
+function clearGzKey() {
+  localStorage.removeItem('gz_key');
+  document.getElementById('gzKeyInput').value = '';
+  const el = document.getElementById('gzKeyStatus');
+  el.textContent = '已清除'; el.style.color = '#6b7280';
+}
+function getGzKey() {
+  return localStorage.getItem('gz_key') || document.getElementById('gzKeyInput').value.trim();
 }
 
 function saveDsKey2() {
@@ -965,8 +996,13 @@ function loadFormData() {
   if (dk) {
     document.getElementById('dsKeyInput').value = dk;
     const el = document.getElementById('dsKeyStatus');
-    el.textContent = '已加载';
-    el.style.color = '#10b981';
+    el.textContent = '已加载'; el.style.color = '#10b981';
+  }
+  const gk = localStorage.getItem('gz_key');
+  if (gk) {
+    document.getElementById('gzKeyInput').value = gk;
+    const el = document.getElementById('gzKeyStatus');
+    el.textContent = '已加载'; el.style.color = '#10b981';
   }
 
   // Load wordlist: localStorage first, fallback to my-config.json
@@ -1192,6 +1228,126 @@ function renderOutput() {
 
 function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ===== GPTZero Auto-Optimize =====
+async function callGPTZero(text) {
+  const key = getGzKey();
+  if (!key) throw new Error('请先在 API Key 设置中填写 GPTZero Key');
+  const res = await fetch('https://api.gptzero.me/v2/predict/text', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+    body: JSON.stringify({ document: text }),
+  });
+  if (!res.ok) {
+    let msg = `GPTZero HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j.error || msg; } catch {}
+    throw new Error(msg);
+  }
+  const j = await res.json();
+  const doc = j.documents?.[0];
+  if (!doc) throw new Error('GPTZero 返回格式异常');
+  return {
+    score: Math.round((doc.completely_generated_prob ?? doc.average_generated_prob ?? 0) * 100),
+    sentences: (doc.sentences || []).map(s => ({
+      text: s.sentence,
+      prob: s.generated_prob ?? 0,
+    })),
+  };
+}
+
+async function autoOptimize() {
+  const gzKey = getGzKey();
+  if (!gzKey) { alert('请先在 API Key 设置中填写 GPTZero Key'); toggleSettings(); return; }
+
+  const text = outputs[activeTab];
+  if (!text) return;
+
+  const btn = document.getElementById('autoOptBtn');
+  const panel = document.getElementById('gzPanel');
+  const scoreEl = document.getElementById('gzScore');
+  const detailEl = document.getElementById('gzDetail');
+  panel.style.display = 'block';
+
+  btn.disabled = true;
+  btn.textContent = '优化中...';
+
+  try {
+    let current = text;
+    const wlEssays = getWordlist().essays;
+
+    for (let round = 1; round <= 3; round++) {
+      scoreEl.textContent = `第 ${round} 轮测试中...`;
+      detailEl.textContent = '';
+
+      const result = await callGPTZero(current);
+      scoreEl.textContent = `第 ${round} 轮：GPTZero AI 概率 ${result.score}%`;
+
+      if (result.score <= 40) {
+        scoreEl.textContent += ' ✅ 已达标，停止优化';
+        outputs[activeTab] = current;
+        renderOutput();
+        break;
+      }
+
+      // Find high-risk sentences (prob > 0.65)
+      const flagged = result.sentences.filter(s => s.prob > 0.65);
+      if (flagged.length === 0) {
+        scoreEl.textContent += ' — 无高风险句子，停止';
+        break;
+      }
+
+      detailEl.innerHTML = flagged.map(s =>
+        `<div style="margin-bottom:6px;padding:6px 8px;background:rgba(239,68,68,0.1);border-radius:4px;">
+          <span style="color:#dc2626;font-weight:600;">${Math.round(s.prob*100)}% AI</span> — ${esc(s.text.trim())}
+        </div>`
+      ).join('');
+
+      if (round === 3) break;
+
+      // Rewrite flagged sentences using user's essay voice
+      scoreEl.textContent += ` — 正在改写 ${flagged.length} 个高风险句子...`;
+      const flaggedList = flagged.map((s, i) => `${i+1}. "${s.text.trim()}"`).join('\n');
+      const essayRef = wlEssays ? `\nWriter's reference essays for voice/phrasing:\n"""\n${wlEssays.slice(0,2000)}\n"""` : '';
+
+      const rewritePrompt = `Rewrite ONLY the following sentences to sound less AI-generated. Use simpler, more direct phrasing. Borrow sentence patterns from the reference essays if provided. Do NOT change any facts or names.${essayRef}
+
+Output format: number each rewritten sentence exactly matching the input numbering. Nothing else.
+
+SENTENCES TO REWRITE:
+${flaggedList}`;
+
+      const rewrites = await callClaude('You are a copy editor specializing in making AI text sound human.', rewritePrompt, () => {});
+
+      // Parse and apply rewrites
+      let updated = current;
+      const lines = rewrites.split('\n').filter(l => /^\d+\./.test(l.trim()));
+      flagged.forEach((s, i) => {
+        const line = lines[i];
+        if (!line) return;
+        const newText = line.replace(/^\d+\.\s*[""]?/, '').replace(/[""]?\s*$/, '').trim();
+        if (newText && newText !== s.text.trim()) {
+          updated = updated.replace(s.text.trim(), newText);
+        }
+      });
+      current = updated;
+      outputs[activeTab] = current;
+      renderOutput();
+    }
+
+    // Final test
+    scoreEl.textContent += ' | 最终测试中...';
+    const final = await callGPTZero(current);
+    const color = final.score <= 40 ? '#065f46' : final.score <= 70 ? '#92400e' : '#991b1b';
+    scoreEl.innerHTML = `<span style="color:${color};font-size:1rem;font-weight:700;">最终 GPTZero 分数：${final.score}% AI</span>`;
+
+  } catch (err) {
+    scoreEl.textContent = '错误：' + err.message;
+    scoreEl.style.color = '#dc2626';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 GPTZero自动优化';
+  }
 }
 
 // ===== AI Sentence Scanner =====
