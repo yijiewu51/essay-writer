@@ -2389,11 +2389,13 @@ ${fr}`,
       switchTab(4);
       gzFlaggedSentences = [];
 
-      // Draft mode: use pre-Turnitin output to preserve human fingerprint.
+      // Draft mode: use the raw user draft directly — any Claude processing (even light scan)
+      // adds Claude fingerprint and raises GPTZero score. The raw draft preserves human writing patterns.
       // Standard mode: use best available post-pipeline output.
-      const stageSource = isDraftMode ? outputs[1] : (outputs[3] || outputs[2] || outputs[1]);
+      const rawUserDraft = isDraftMode ? document.getElementById('user-draft').value.trim() : '';
+      const stageSource = rawUserDraft || (outputs[3] || outputs[2] || outputs[1]);
       outputs[4] = stageSource;
-      if (isDraftMode) log('草稿模式：GPTZero 使用翻译前文稿（点击红色句子时 Claude 会给出改写建议）');
+      if (isDraftMode) log('草稿模式：GPTZero 使用你的原始草稿（未经 Claude 处理，保留人类写作指纹）');
 
       log('GPTZero 检测中...');
       try {
