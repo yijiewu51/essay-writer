@@ -502,6 +502,14 @@
       <div class="wl-hint">这些特征会加入去AI优化阶段的检查列表</div>
     </div>
   </div>
+  <div class="wl-essays" style="margin-bottom:14px;">
+    <div class="wl-essays-header" style="margin-bottom:6px;">
+      <label>📋 机构写法 / 结构指导（传入 Stage 1 生成 prompt）</label>
+    </div>
+    <textarea id="wl-structure" rows="5" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #6366f144;color:#e2e8f0;font-size:0.82rem;border-radius:6px;padding:8px;" placeholder="粘贴机构的写法建议、结构要求、注意事项等&#10;&#10;e.g.&#10;开头开门见山，不要套路开头&#10;实验项目：不要过多描述过程，写具体职责、文献知识、突破困难、创新点&#10;结尾约20%：个人能力总结 + Why UK + 成就总结 + 对项目期待 + 未来计划"></textarea>
+    <div class="wl-hint">这里的内容会直接加入 Stage 1 的生成指令，AI 按你机构的标准写文书</div>
+  </div>
+
   <div class="wl-essays">
     <div class="wl-essays-header">
       <label>⭐ 参考文章库（Stage 2 借用你的表达风格替换 AI 短语）</label>
@@ -1215,6 +1223,7 @@ function saveWordlist() {
     banned: document.getElementById('wl-banned').value,
     preferred: document.getElementById('wl-preferred').value,
     aitells: document.getElementById('wl-aitells').value,
+    structureGuide: document.getElementById('wl-structure').value,
     essayLibrary,
   };
   localStorage.setItem('wl_config', JSON.stringify(data));
@@ -1224,7 +1233,7 @@ function saveWordlist() {
 }
 
 function clearWordlist() {
-  ['wl-banned','wl-preferred','wl-aitells'].forEach(id => document.getElementById(id).value = '');
+  ['wl-banned','wl-preferred','wl-aitells','wl-structure'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('essayCardList').innerHTML = '';
   localStorage.removeItem('wl_config');
 }
@@ -1237,6 +1246,7 @@ function loadWordlist() {
     if (data.banned) document.getElementById('wl-banned').value = data.banned;
     if (data.preferred) document.getElementById('wl-preferred').value = data.preferred;
     if (data.aitells) document.getElementById('wl-aitells').value = data.aitells;
+    if (data.structureGuide) document.getElementById('wl-structure').value = data.structureGuide;
     document.getElementById('essayCardList').innerHTML = '';
     if (data.essayLibrary?.length) {
       data.essayLibrary.forEach(e => addEssayCard(e.title || '', e.content || ''));
@@ -1255,6 +1265,7 @@ function getWordlist() {
     banned: parse('wl-banned'),
     preferred: parse('wl-preferred'),
     aitells: document.getElementById('wl-aitells').value.trim(),
+    structureGuide: document.getElementById('wl-structure').value.trim(),
     essays: essayLib.map(e => e.content.trim()).filter(Boolean).join('\n\n---\n\n'),
   };
 }
@@ -1930,6 +1941,7 @@ function promptGenerateUCAS(ctx) {
   const extraBanned = wl.banned.length ? `\nADDITIONAL BANNED WORDS: ${wl.banned.join(', ')}` : '';
   const preferredSection = wl.preferred.length ? `\nPREFERRED VOCABULARY: When natural, prefer: ${wl.preferred.join(', ')}` : '';
   const rules = ucasStyleRules(extraBanned, preferredSection);
+  const structureSection = wl.structureGuide ? `\nINSTITUTION WRITING GUIDE (follow these structural requirements):\n${wl.structureGuide}` : '';
 
   // New 3-question format
   if (ucasFormat === 'new3q' && questions) {
@@ -1945,7 +1957,7 @@ Character limit: ${item.limit} characters (approximately ${approxWords} words)`;
 APPLICANT INFORMATION:
 ${info}
 
-${rules}
+${rules}${structureSection}
 
 QUESTIONS TO ANSWER:
 ${parts}
@@ -1965,7 +1977,7 @@ For each answer:
 APPLICANT INFORMATION:
 ${info}
 
-${rules}
+${rules}${structureSection}
 
 QUESTIONS / REQUIREMENTS:
 ${customQ}
@@ -1979,7 +1991,7 @@ Follow each question's word/character limit exactly. Output each answer clearly 
 APPLICANT INFORMATION:
 ${info}
 
-${rules}
+${rules}${structureSection}
 
 STRUCTURE (follow this order):
 1. Opening: a specific intellectual moment, question, or observation that drew you to this subject — not "I have always been fascinated by..."
@@ -2065,7 +2077,7 @@ SPECIFICITY:
 - Show through actions and concrete scenes — do not tell through adjectives.
 - Every claim must be backed by a specific example, number, or scene.
 - If this is a recommendation letter, write entirely from the recommender's first-person perspective.
-${preferredSection}
+${preferredSection}${wl.structureGuide ? `\nINSTITUTION WRITING GUIDE (follow these structural requirements):\n${wl.structureGuide}` : ''}
 Target length: approximately ${wc} words.
 Output ONLY the essay/letter text. No title, no heading, no commentary.`;
 }
