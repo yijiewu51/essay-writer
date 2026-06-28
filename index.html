@@ -914,6 +914,7 @@ let activeTab = 0;
 let generating = false;
 let activeStage = -1;
 let gzFlaggedSentences = []; // [{text, prob}] from last GPTZero scan
+let gzColorMap = new Map(); // replacement text → 'ref' | 'claude' (for color coding)
 
 // ===== API Key =====
 function toggleSettings() {
@@ -1348,11 +1349,25 @@ function renderOutput() {
 
 function renderGZEditor(area, text) {
   const total = gzFlaggedSentences.length;
-  // Only highlight top 8 by probability — prevent overwhelming the user when all sentences are flagged
   const top8 = [...gzFlaggedSentences].sort((a, b) => b.prob - a.prob).slice(0, 8);
 
   let html = esc(text);
-  // Sort by length desc to avoid partial-match replacements
+
+  // 1. Highlight color-map entries (ref=green, claude=orange) — applied replacements
+  const colorEntries = [...gzColorMap.entries()].sort((a, b) => b[0].length - a[0].length);
+  for (const [sentText, source] of colorEntries) {
+    const escaped = esc(sentText.trim());
+    if (!html.includes(escaped)) continue;
+    const bg = source === 'ref' ? '#dcfce7' : '#fff7ed';
+    const border = source === 'ref' ? '#16a34a' : '#ea580c';
+    const label = source === 'ref' ? '📚 参考句' : '🤖 AI改写';
+    const span = `<span class="ai-sentence" style="background:${bg};border-bottom:2px solid ${border};" ` +
+      `data-original="${escaped.replace(/"/g,'&quot;')}" data-prob="0" ` +
+      `onclick="editGZSentence(this)" title="${label}，点击可进一步编辑">${escaped}</span>`;
+    html = html.replace(escaped, span);
+  }
+
+  // 2. Highlight still-flagged sentences (red)
   const toHighlight = [...top8].sort((a, b) => b.text.length - a.text.length);
   for (const s of toHighlight) {
     const escapedSent = esc(s.text.trim());
@@ -1366,12 +1381,14 @@ function renderGZEditor(area, text) {
     html = html.replace(escapedSent, span);
   }
 
-  const remaining = total > 8 ? `共 ${total} 句 AI，已标最高风险 8 句，改完重测后继续` : `共 ${total} 句需修改`;
+  const legend = `<span style="font-size:0.75rem;color:#16a34a;">●参考句</span> <span style="font-size:0.75rem;color:#ea580c;">●AI改写</span> <span style="font-size:0.75rem;color:#dc2626;">●待处理</span>`;
+  const remaining = total > 0 ? `${total} 句仍标红` : '全部已处理';
   area.innerHTML = `<div class="out-text" style="white-space:pre-wrap;">${html}</div>` +
     `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">` +
-    `<button class="copy-btn" style="background:#8b5cf6;color:white;" onclick="qualityOptimize()" id="qualBtn">Claude 质量优化</button>` +
+    `<button class="copy-btn" style="background:#10b981;color:white;" onclick="autoApplyAll()" id="autoApplyBtn">⚡ 自动应用全部</button>` +
     `<button class="copy-btn" style="background:#6366f1;color:white;" onclick="retestGPTZero()" id="retestBtn">重测 GPTZero</button>` +
-    `<span style="font-size:0.78rem;color:#64748b;">🔴点击句子编辑，Enter保存 · ${remaining}</span>` +
+    `<button class="copy-btn" style="background:#8b5cf6;color:white;" onclick="qualityOptimize()" id="qualBtn">Claude 质量优化</button>` +
+    `${legend} <span style="font-size:0.78rem;color:#64748b;">${remaining}，点击任意句子微调</span>` +
     `</div>`;
 }
 
@@ -1538,6 +1555,78 @@ ${text}
     const b = document.getElementById('qualBtn');
     if (b) { b.disabled = false; b.textContent = 'Claude 质量优化'; }
   }
+}
+
+async function autoApplyAll() {
+  const gzKey = getGzKey();
+  if (!gzKey) { alert('请先填写 GPTZero Key'); return; }
+  const btn = document.getElementById('autoApplyBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '处理中...'; }
+
+  const wl = getWordlist();
+  let current = outputs[4];
+  const allFlagged = [...gzFlaggedSentences];
+
+  // Phase 1: reference essay match (instant, pure JS)
+  const noMatch = [];
+  let refCount = 0;
+  for (const s of allFlagged) {
+    const orig = s.text.trim();
+    const match = findRefMatch(orig, wl.essays);
+    if (match && match.sentence.trim() !== orig) {
+      current = current.replace(orig, match.sentence.trim());
+      gzColorMap.set(match.sentence.trim(), 'ref');
+      refCount++;
+    } else {
+      noMatch.push(s);
+    }
+  }
+  outputs[4] = current;
+  if (btn) btn.textContent = `参考句 ${refCount} 句完成，Claude 改写 ${noMatch.length} 句...`;
+
+  // Phase 2: Claude batch rewrite for non-matched sentences
+  if (noMatch.length > 0) {
+    const bannedStr = wl.banned.length ? `Avoid: ${wl.banned.join(', ')}. ` : '';
+    const essayRef = wl.essays ? `\nMimic this writer's voice:\n"""\n${wl.essays.slice(0, 1500)}\n"""` : '';
+    const batchPrompt = `Rewrite each sentence to sound less AI-generated. Keep all facts and meaning. Use direct, simple phrasing. ${bannedStr}Output ONLY numbered rewrites, one per line. Format: "1. [sentence]"${essayRef}
+
+SENTENCES:
+${noMatch.map((s, i) => `${i + 1}. ${s.text.trim()}`).join('\n')}`;
+
+    try {
+      const result = await callClaude('You rewrite sentences to sound human. Output only the numbered list.', batchPrompt, () => {});
+      const lines = result.split('\n').filter(l => /^\d+\./.test(l.trim()));
+      noMatch.forEach((s, i) => {
+        const line = lines[i];
+        if (!line) return;
+        const newText = line.replace(/^\d+\.\s*["'""]?/, '').replace(/["'""]?\s*$/, '').trim();
+        if (newText && newText !== s.text.trim()) {
+          current = current.replace(s.text.trim(), newText);
+          gzColorMap.set(newText, 'claude');
+        }
+      });
+      outputs[4] = current;
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ 自动应用全部'; }
+      alert('Claude 改写失败：' + e.message);
+      return;
+    }
+  }
+
+  // Re-scan GPTZero
+  if (btn) btn.textContent = 'GPTZero 重新检测...';
+  try {
+    const result = await callGPTZero(outputs[4]);
+    gzFlaggedSentences = result.sentences.filter(s => s.prob > 0.65);
+    renderOutput();
+    log(`自动应用完成：参考句 ${refCount} 句 🟢，Claude 改写 ${noMatch.length} 句 🟠，剩余 ${gzFlaggedSentences.length} 句标红 | GPTZero ${result.score}% AI`, result.score <= 40 ? 'done' : 'active');
+    document.getElementById('logWrap').style.display = 'block';
+  } catch (e) {
+    renderOutput();
+    log('GPTZero 检测失败：' + e.message, 'err');
+  }
+  const b = document.getElementById('autoApplyBtn');
+  if (b) { b.disabled = false; b.textContent = '⚡ 自动应用全部'; }
 }
 
 async function retestGPTZero() {
@@ -2472,6 +2561,7 @@ ${fr}`,
       activeStage = 4;
       switchTab(4);
       gzFlaggedSentences = [];
+      gzColorMap = new Map();
 
       // Draft mode: use the raw user draft directly — any Claude processing (even light scan)
       // adds Claude fingerprint and raises GPTZero score. The raw draft preserves human writing patterns.
