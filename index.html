@@ -1377,7 +1377,6 @@ function renderGZEditor(area, text) {
 function editGZSentence(el) {
   if (el.querySelector('textarea')) return; // already editing
   const originalHtml = el.dataset.original;
-  // Decode HTML entities to get plain text
   const tmp = document.createElement('textarea');
   tmp.innerHTML = originalHtml;
   const plainText = tmp.value;
@@ -1387,16 +1386,37 @@ function editGZSentence(el) {
   ta.value = plainText;
   ta.rows = Math.max(2, Math.ceil(plainText.length / 80));
 
+  // Suggestion area (async Claude hint)
+  const hint = document.createElement('div');
+  hint.style.cssText = 'font-size:0.76rem;color:#6366f1;margin-top:4px;padding:4px 6px;background:#f0f0ff;border-radius:4px;cursor:pointer;line-height:1.5;';
+  hint.textContent = '💡 Claude 建议加载中...';
+  hint.title = '点击使用此建议（仍需自己修改以降低AI率）';
+
   el.style.background = '#eff6ff';
   el.style.borderBottom = '2px solid #3b82f6';
   el.style.cursor = 'default';
   el.textContent = '';
   el.appendChild(ta);
+  el.appendChild(hint);
   ta.focus();
   ta.select();
 
   ta.addEventListener('blur', () => saveGZSentence(el, ta, plainText));
   ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ta.blur(); } });
+
+  // Async: fetch Claude suggestion without blocking the editor
+  const wl = getWordlist();
+  const bannedStr = wl.banned.length ? `Banned words to avoid: ${wl.banned.join(', ')}. ` : '';
+  const essayRef = wl.essays ? `\nReference writing style:\n"""\n${wl.essays.slice(0, 1500)}\n"""` : '';
+  const suggPrompt = `Rewrite this sentence to sound less AI-generated. Keep the same meaning and facts. Use simpler, more direct phrasing. ${bannedStr}Output ONLY the rewritten sentence, nothing else.${essayRef}\n\nSentence: ${plainText}`;
+  callClaude('You rewrite sentences to sound more human and natural.', suggPrompt, () => {})
+    .then(suggestion => {
+      const s = suggestion.trim().replace(/^["'"]|["'"]$/g, '');
+      if (!s || s === plainText) { hint.textContent = '💡 无建议（原句已较好）'; return; }
+      hint.innerHTML = `💡 <strong>Claude 建议：</strong>${esc(s)} <span style="color:#94a3b8;font-size:0.7rem;">（点击复制到编辑框，再自己修改）</span>`;
+      hint.onclick = () => { ta.value = s; ta.focus(); };
+    })
+    .catch(() => { hint.textContent = ''; });
 }
 
 function saveGZSentence(el, ta, original) {
@@ -2369,65 +2389,11 @@ ${fr}`,
       switchTab(4);
       gzFlaggedSentences = [];
 
-      // Draft mode: start from pre-Turnitin output (preserves human fingerprint),
-      // then auto-run a quality pass (targeted fixes only, not full rewrite).
+      // Draft mode: use pre-Turnitin output to preserve human fingerprint.
       // Standard mode: use best available post-pipeline output.
-      let stageSource = isDraftMode ? outputs[1] : (outputs[3] || outputs[2] || outputs[1]);
+      const stageSource = isDraftMode ? outputs[1] : (outputs[3] || outputs[2] || outputs[1]);
       outputs[4] = stageSource;
-
-      if (isDraftMode) {
-        log('草稿模式：先对草稿做一轮质量优化（保留写作指纹）...');
-        const wc = stageSource.trim().split(/\s+/).length;
-        const wlQ = getWordlist();
-        const bannedStr = wlQ.banned.length ? `\nBANNED WORDS (replace if present): ${wlQ.banned.join(', ')}` : '';
-        const preferredStr = wlQ.preferred.length ? `\nPREFERRED VOCABULARY (use when natural): ${wlQ.preferred.join(', ')}` : '';
-        const aitellsStr = wlQ.aitells ? `\nAI WRITING PATTERNS TO AVOID:\n${wlQ.aitells}` : '';
-        const structureStr = wlQ.structureGuide ? `\nINSTITUTION STRUCTURE GUIDE (ensure essay follows this):\n${wlQ.structureGuide}` : '';
-        const essaysStr = wlQ.essays ? `\nWRITER'S REFERENCE ESSAYS (borrow phrasing patterns and vocabulary level from these when making fixes — do not copy whole sentences):\n"""\n${wlQ.essays.slice(0, 3000)}\n"""` : '';
-
-        const qualPrompt = `You are a skilled editor doing a single quality pass on this admissions essay draft.
-
-Fix ONLY these issues:
-- Logical gaps between sentences or paragraphs (add connective tissue where needed)
-- Imprecise word choices that weaken the argument
-- Sentences that end too abruptly before making their point
-- Repetitive phrasing within the same paragraph
-- Any banned words listed below — replace with natural alternatives${bannedStr}${preferredStr}${aitellsStr}${structureStr}
-
-DO NOT:
-- Change the overall structure or paragraph order
-- Add new examples or content
-- Alter the writer's voice, tone, or sentence length patterns
-- Make it more formal or "academic-sounding"
-- Rewrite sentences that are already good
-${essaysStr}
-Target: ~${wc} words (±5%). Output only the improved essay, no commentary.
-
-ESSAY:
-"""
-${stageSource}
-"""`;
-        try {
-          const area = document.getElementById('outArea');
-          let qualResult = '';
-          await callClaude(
-            'You are a skilled editor. Make minimal quality improvements while preserving the writer\'s voice.',
-            qualPrompt,
-            chunk => {
-              qualResult = chunk;
-              outputs[4] = chunk;
-              if (activeTab === 4 && area) {
-                const td = area.querySelector('.out-text');
-                if (td) td.textContent = chunk; else area.innerHTML = `<div class="out-text">${esc(chunk)}</div>`;
-              }
-            }
-          );
-          outputs[4] = qualResult;
-          log('质量优化完成，正在 GPTZero 检测...');
-        } catch (e) {
-          log('质量优化失败，直接用草稿检测：' + e.message, 'err');
-        }
-      }
+      if (isDraftMode) log('草稿模式：GPTZero 使用翻译前文稿（点击红色句子时 Claude 会给出改写建议）');
 
       log('GPTZero 检测中...');
       try {
